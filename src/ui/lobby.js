@@ -1,4 +1,7 @@
-import { LobbyClient, codeFromUrl } from '../data/lobby.js';
+import {qrLibrary} from './qr.js';
+import {normalizeRoom,safeUrl} from '../core/model.js';
+import {canRun} from './validation.js';
+import { LobbyClient, codeFromUrl, studentJoinUrl } from '../data/lobby.js';
 import { watchLobby } from '../data/realtime.js';
 import { esc, field } from './dom.js';
 import { mountLiveGame } from './live-play.js';
@@ -25,7 +28,9 @@ function mountLive(root, app, client, initial, { code, teacher = false, contentI
   const playOptions = { code, teacher, onReset: () => renderStudentEntry(root, app, code, false), onExit: state => mountLive(root, app, client, state, { code, teacher, contentId }) };
   if ((['playing','paused'].includes(initial.status) || initial.status==='finished'&&initial.startedAt)) return mountLiveGame(root, app, client, initial, playOptions);
   let state = initial, disposed = false, busy = false, queued = false, stopWatch, timer, debounce, error = '', receivedAt = Date.now();
-  root.innerHTML = `<div class="page-heading"><div><div class="eyebrow">LIVE LOBBY</div><h1>${esc(state.title)}</h1><p id="lobby-intro">${teacher ? '학생들이 입장하면 명단에 바로 나타납니다.' : '선생님이 게임을 시작할 때까지 기다려 주세요.'}</p></div><span id="connection-status" role="status">실시간 연결 중…</span></div>${teacher ? `<section class="panel"><p>입장 코드 <strong class="room-code">${esc(code)}</strong></p>${field('학생 입장 링크', `<input readonly value="${esc(new URL(location.pathname + '#/join/' + code, location.origin).href)}">`)}<p class="muted">같은 주소의 QR 또는 링크로 접속하면 방 코드가 자동 입력됩니다.</p></section>` : ''}<div id="lobby-error" role="alert"></div><div id="lobby-state" aria-live="polite"></div><div id="lobby-controls" class="actions"></div><div id="profile-area"></div>`;
+  const joinUrl=studentJoinUrl(code||'',safeUrl(initial.qrBaseUrl)||location.origin+location.pathname);
+  root.innerHTML = `${teacher?'<a class="btn class-back" href="#/library">← 내 방탈출로 돌아가기</a>':''}<div class="page-heading"><div><div class="eyebrow">LIVE LOBBY</div><h1>${esc(state.title)}</h1><p id="lobby-intro">${teacher ? '학생들이 입장하면 명단에 바로 나타납니다.' : '선생님이 게임을 시작할 때까지 기다려 주세요.'}</p></div><span id="connection-status" role="status">실시간 연결 중…</span></div>${teacher ? `<section class="panel"><p>입장 코드 <strong class="room-code">${esc(code)}</strong></p>${field('학생 입장 링크', `<input readonly value="${esc(joinUrl)}">`)}<div class="entry-qr" id="entry-qr" aria-label="학생 입장 QR"></div><p class="muted">같은 주소의 QR 또는 링크로 접속하면 방 코드가 자동 입력됩니다.</p></section>` : ''}<div id="lobby-error" role="alert"></div><div id="lobby-state" aria-live="polite"></div><div id="lobby-controls" class="actions"></div><div id="profile-area"></div>`;
+  if(teacher){const qrRoot=root.querySelector('#entry-qr');qrLibrary('qrcode-generator').then(()=>{if(!qrRoot.isConnected)return;const g=globalThis.qrcode(0,'M');g.addData(joinUrl);g.make();qrRoot.innerHTML=g.createSvgTag({cellSize:4,margin:16,scalable:true});}).catch(e=>{qrRoot.textContent=e.message;});}
   const draw = () => {
     if (disposed) return;
     root.querySelector('#lobby-error').textContent = error;
@@ -98,10 +103,12 @@ export async function renderTeacherLobby(root, app, contentId) {
   if (app.repo.mode !== 'cloud') { root.innerHTML = '<section class="panel"><h1>온라인 교사 로그인이 필요합니다</h1><a class="btn" href="#/login">교사 로그인</a></section>'; return; }
   const row = await app.repo.get(contentId); if (!row) throw Error('콘텐츠를 찾을 수 없습니다.');
   const client = new LobbyClient(app.repo);
-  root.innerHTML = `<section class="panel"><h1>${esc(row.title)} · 대기실</h1><p>현재 콘텐츠 설정으로 학생 입장을 엽니다. 열려 있는 수업이 있으면 해당 대기실로 돌아갑니다.</p><p>입장 코드 <strong class="room-code">${esc(row.room_code)}</strong></p><button class="btn primary" id="open-lobby">대기실 열기 / 돌아가기</button><p class="form-message" role="alert"></p></section>`;
-  root.querySelector('#open-lobby').onclick = async e => {
-    const btn = e.target; btn.disabled = true;
-    try { mountLive(root, app, client, await client.teacher('open', contentId), { code: row.room_code, teacher: true, contentId }); }
-    catch (err) { root.querySelector('.form-message').textContent = err.code === 'PGRST202' ? '대기실 SQL(002_live_lobby.sql)을 먼저 적용하세요.' : err.message; } finally { btn.disabled = false; }
-  };
+  root.innerHTML='<p>수업을 여는 중…</p>';
+  try{
+    const classes=await app.repo.classStates();
+    if(!classes.some(s=>s.contentId===contentId)&&!canRun(normalizeRoom(row.document))){root.innerHTML=`<a class="btn" href="#/editor/${contentId}">제작기로 돌아가기</a>`;return;}
+    if(!classes.some(s=>s.contentId===contentId))await app.repo.save(normalizeRoom({...row.document,id:row.id,roomCode:row.room_code}));
+    const state=await client.teacher('open',contentId);state.qrBaseUrl=row.document.qrBaseUrl;
+    mountLive(root,app,client,state,{code:row.room_code,teacher:true,contentId});
+  }catch(err){root.innerHTML=`<section class="panel"><h1>수업을 열지 못했습니다</h1><p role="alert">${esc(err.message)}</p><a class="btn" href="#/editor/${contentId}">제작기로 돌아가기</a><a class="btn" href="#/library">← 내 방탈출로 돌아가기</a></section>`;}
 }

@@ -1,4 +1,4 @@
-import { validateRoom } from '../core/model.js';
+import { validateDraft, normalizeRoom } from '../core/model.js';
 const KEY = 'escape-studio:rooms:v1';
 export class LocalRepository {
   constructor(storage = globalThis.localStorage) { this.storage = storage; this.mode = 'local'; }
@@ -8,10 +8,11 @@ export class LocalRepository {
     let rooms;
     try { rooms = JSON.parse(raw); } catch { throw Error('저장 데이터를 읽을 수 없습니다. 브라우저 데이터를 지우지 말고 JSON 백업을 확인하세요.'); }
     if (!Array.isArray(rooms)) throw Error('저장 데이터 형식이 올바르지 않습니다.');
-    return rooms.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return rooms.map(normalizeRoom).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
   async save(room) {
-    const errors = validateRoom(room); if (errors.length) throw Error(errors[0]);
+    const errors = validateDraft(room); if (errors.length) throw Error(errors[0]);
+    room=normalizeRoom(room);
     const rooms = await this.list(), index = rooms.findIndex(r => r.id === room.id);
     const saved = structuredClone({ ...room, updatedAt: new Date().toISOString() });
     if (index < 0) rooms.push(saved); else rooms[index] = saved;

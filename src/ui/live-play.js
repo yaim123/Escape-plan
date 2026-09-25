@@ -1,3 +1,4 @@
+import {displayAttributes} from './display.js';
 import { resultHtml, resultTable, resetChoice } from './results.js';
 import {qrProgressHtml,scanQrDialog} from './qr.js';
 import { LivePlayClient } from '../data/play.js';
@@ -28,7 +29,7 @@ const wrongTotal=p=>Object.values(p?.wrongCounts||{}).reduce((a,b)=>a+Number(b),
 export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,onReset}) {
   let scanController;
   const client=new LivePlayClient(lobby); let game=null, disposed=false, loading=false, queued=false, writing=false, signature='', feedback='', stopWatch, timer, debounce, clockTimer, receivedAt=Date.now(), panelTarget=null, panelRevision=null;
-  root.innerHTML=`<div class="page-heading"><div><span class="eyebrow">${teacher?'LIVE PROGRESS':'LIVE PLAY'}</span><h1>${esc(initial.title)}</h1><p>${teacher?'학생과 팀의 진행 상태를 실시간으로 확인합니다.':'단서를 살펴보고 다음 콘텐츠를 열어보세요.'}</p></div><span id="game-connection" role="status">실시간 연결 중…</span></div><div id="game-error" role="alert"></div><p id="game-feedback" role="status"></p><p id="game-clock" role="timer"></p><div id="arrival-summary"></div><div id="game-progress"></div><div id="live-content"><p>진행 상태를 불러오는 중…</p></div>${teacher?'<div id="control-panel"></div><div id="control-audit"></div><div class="actions"><button class="btn primary" id="pause-session">전체 일시정지</button><button class="btn" id="finish-session">수업 종료</button><button class="btn" id="reset-session">수업 완료 및 초기화</button></div>':''}`;
+  root.innerHTML=`${teacher?'<a class="btn class-back" href="#/library">← 내 방탈출로 돌아가기</a>':''}<div class="page-heading"><div><span class="eyebrow">${teacher?'LIVE PROGRESS':'LIVE PLAY'}</span><h1>${esc(initial.title)}</h1><p>${teacher?'학생과 팀의 진행 상태를 실시간으로 확인합니다.':'단서를 살펴보고 다음 콘텐츠를 열어보세요.'}</p></div><span id="game-connection" role="status">실시간 연결 중…</span></div><div id="game-error" role="alert"></div><p id="game-feedback" role="status"></p><p id="game-clock" role="timer"></p><div id="arrival-summary"></div><div id="game-progress"></div><div id="live-content"><p>진행 상태를 불러오는 중…</p></div>${teacher?'<div id="control-panel"></div><div id="control-audit"></div><div class="actions"><button class="btn primary" id="pause-session">전체 일시정지</button><button class="btn" id="finish-session">수업 종료</button><button class="btn" id="reset-session">수업 완료 및 초기화</button></div>':''}`;
   const showError=error=>{if(!disposed) root.querySelector('#game-error').textContent=error.message||error;};
   root.querySelector('#game-clock').insertAdjacentHTML('afterend','<div id="qr-progress"></div>');
   const cleanup=()=>{disposed=true;scanController?.abort();stopWatch?.();clearInterval(timer);clearInterval(clockTimer);clearTimeout(debounce);client.dispose();document.removeEventListener('visibilitychange',visible);window.removeEventListener('online',schedule);return true;};
@@ -45,7 +46,7 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
     const drawHints=()=>{const el=root.querySelector('#live-hints');if(el)el.innerHTML=`${(game.revealedHints||[]).map((h,i)=>`<p class="callout">힌트 ${i+1}: ${esc(h)}</p>`).join('')}${game.hasMoreHints?'<button class="btn" data-hint>다음 힌트 보기</button>':''}`;};
     if(signature===nextSignature){drawHints();return;} // Keep in-progress input on realtime/heartbeat updates.
     signature=nextSignature;
-    root.querySelector('#live-content').innerHTML=b?`<section class="panel live-question ${b.display==='full'?'immersive':''}"><div class="eyebrow">STAGE ${esc(b.stage)} · ${esc(BLOCK_TYPES[b.type])}</div><h2>${esc(b.title)}</h2><p class="pre-line story-body">${esc(b.body)}</p>${mediaHtml(b.media)}<form id="live-answer">${liveAnswerControls(b)}</form><div id="live-hints"></div></section>${game.available.length>1?`<nav class="actions available-content" aria-label="공개된 콘텐츠">${game.available.map(item=>`<button class="btn" data-select="${esc(item.id)}" ${item.id===b.id?'disabled':''}>${esc(item.title)}</button>`).join('')}</nav>`:''}`:`<section class="panel"><h2>${p.completedCount===p.totalCount?'현재 콘텐츠를 모두 완료했습니다.':'다른 팀원 또는 조건을 기다리고 있습니다.'}</h2><p>진행 상태가 바뀌면 자동으로 다음 콘텐츠가 표시됩니다.</p></section>`;
+    root.querySelector('#live-content').innerHTML=b?`<section ${displayAttributes(b,game.theme)}><div class="content-body"><div class="eyebrow">STAGE ${esc(b.stage)} · ${esc(BLOCK_TYPES[b.type])}</div><h2>${esc(b.title)}</h2><p class="pre-line story-body">${esc(b.body)}</p>${mediaHtml(b.media)}<form id="live-answer">${liveAnswerControls(b)}</form><div id="live-hints"></div></div></section>${game.available.length>1?`<nav class="actions available-content" aria-label="공개된 콘텐츠">${game.available.map(item=>`<button class="btn" data-select="${esc(item.id)}" ${item.id===b.id?'disabled':''}>${esc(item.title)}</button>`).join('')}</nav>`:''}`:`<section class="panel"><h2>${p.completedCount===p.totalCount?'현재 콘텐츠를 모두 완료했습니다.':'다른 팀원 또는 조건을 기다리고 있습니다.'}</h2><p>진행 상태가 바뀌면 자동으로 다음 콘텐츠가 표시됩니다.</p></section>`;
     drawHints();
     root.querySelector('#live-answer')?.addEventListener('submit',async event=>{
       event.preventDefault();if(writing||game.status!=='playing')return;writing=true;
@@ -81,9 +82,11 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
     if(disposed)return;
     if(game && Number(next.revision)<Number(game.revision))return;
     if(!keepFeedback && game?.current?.id!==next.current?.id) feedback='';
+    const changedBlock=game?.current?.id!==next.current?.id;
     game=next;receivedAt=Date.now();drawClock();root.querySelector('#game-error').textContent='';
-    if(game.status!=='playing'||game.result)scanController?.abort();
-    root.querySelector('#qr-progress').innerHTML=teacher?(game.participants||[]).filter(p=>p.qr?.length).map(p=>`<details class="panel"><summary>${esc(game.playMode==='team'?p.team+'조 · '+p.name:p.name)} · QR 진행</summary>${qrProgressHtml(p.qr)}</details>`).join(''):qrProgressHtml(game.qr)+(game.status==='playing'&&!game.result&&game.qr?.length?'<button class="btn primary" data-qr-scan>QR 스캔</button>':'');
+    if(changedBlock)scanController?.abort();
+    if(game.status!=='playing'||game.result||game.current?.questionType!=='qr')scanController?.abort();
+    root.querySelector('#qr-progress').innerHTML=teacher?(game.participants||[]).filter(p=>p.qr?.length).map(p=>`<details class="panel"><summary>${esc(game.playMode==='team'?p.team+'조 · '+p.name:p.name)} · QR 진행</summary>${qrProgressHtml(p.qr)}</details>`).join(''):(game.status==='playing'&&!game.result&&game.current?.questionType==='qr'?qrProgressHtml(game.qr):'');
     if(!['playing','paused','finished'].includes(game.status)){exit().catch(showError);return;}
     if(teacher)drawTeacher();else drawStudent();
   };
@@ -98,8 +101,13 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
   document.addEventListener('visibilitychange',visible);window.addEventListener('online',schedule);
   clockTimer=setInterval(drawClock,1000);
   root.onclick=async event=>{
-    const scanButton=event.target.closest('[data-qr-scan],[data-question-qr]');
-    if(scanButton){if(writing||scanController)return;const blockId=scanButton.dataset.questionQr;scanController=new AbortController();try{const token=await scanQrDialog(scanController.signal);if(token&&!disposed){writing=true;const r=await lobby.rpc(blockId?'escape_answer_qr':'escape_scan_qr',{p_token:client.token(code),p_qr:token,...(blockId?{p_block:blockId}:{})});root.querySelector('#game-error').textContent='';feedback=r.message;apply(r.game,true);}}catch(e){showError(e);}finally{writing=false;scanController=null;if(queued){queued=false;schedule();}}return;}
+    const scanButton=event.target.closest('[data-question-qr]');
+    if(scanButton){if(writing||scanController)return;const blockId=scanButton.dataset.questionQr;scanController=new AbortController();
+      try{await scanQrDialog(scanController.signal,async token=>{writing=true;try{
+        const r=await lobby.rpc('escape_answer_qr',{p_token:client.token(code),p_qr:token,p_block:blockId});
+        feedback=r.message;apply(r.game,true);return {keepOpen:r.game.status==='playing'&&r.game.current?.id===blockId,message:r.message};
+      }finally{writing=false;}});}finally{scanController=null;if(queued){queued=false;schedule();}}return;
+    }
     const manage=event.target.closest('[data-manage-student],[data-manage-team],[data-close-control]');if(manage){if(game.status==='finished')return;if(manage.hasAttribute('data-close-control')){root.querySelector('#control-panel').innerHTML='';panelTarget=null;}else openPanel(manage.dataset.manageStudent?{scope:'student',participant:manage.dataset.manageStudent}:{scope:'team',team:Number(manage.dataset.manageTeam)});return;}
     const btn=event.target.closest('[data-select],[data-approve],#finish-session,#pause-session,#reset-session,[data-hint]');if(!btn||writing)return;
     writing=true;btn.disabled=true;

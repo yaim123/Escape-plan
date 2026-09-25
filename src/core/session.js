@@ -1,6 +1,6 @@
 import { isUnlocked, assignedMembers, isComplete } from './conditions.js';
 import { checkAnswer } from './answers.js';
-import {qrTestEvents,scanTestQr} from './qr.js';
+import {qrTestEvents,qrTestState,scanTestQr} from './qr.js';
 export function createTestSession(room, now = Date.now(), memberCount = 4) {
   const members = Array.from({ length: room.playMode === 'team' ? memberCount : 1 }, (_, i) => ({ member: i + 1, role: room.teamSettings.rolesEnabled ? (room.teamSettings.roles[i === 0 ? 0 : Math.min(1, room.teamSettings.roles.length - 1)] || '조원') : '조원' }));
   return { roomId: room.id, contentRevision: room.updatedAt, startedAt: now, finishedAt: null, members, events: [], wrong: {}, hints: {}, penalties: 0 };
@@ -31,9 +31,10 @@ export function recordComplete(room, session, block, member, source = 'test', no
 }
 export function submitTestQr(room,session,block,member,qrId) {
   if(!block||block.type!=='question'||block.questionType!=='qr'||!blockAvailable(room,session,block,member)) throw Error('현재 QR 문제에서만 사용할 수 있습니다.');
-  if(block.qrId!==qrId) throw Error('이 문제의 QR코드가 아닙니다.');
+  const m=(room.qrMissions||[]).find(m=>m.id===block.qrMissionId);
+  if(m?!m.codes.some(q=>q.id===qrId):block.qrId!==qrId) throw Error('이 문제의 QR코드가 아닙니다.');
   scanTestQr(room,session,member,qrId);
-  recordComplete(room,session,block,member);
+  if(!m||qrTestState(room,session,member).find(x=>x.id===m.id)?.done)recordComplete(room,session,block,member);
 }
 export function submitAnswer(room, session, block, member, input, now = Date.now()) {
   if (!blockAvailable(room, session, block, member)) return { ok: false, message: '아직 공개되지 않았거나 이미 완료한 콘텐츠입니다.' };

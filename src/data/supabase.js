@@ -1,4 +1,4 @@
-import { validateRoom } from '../core/model.js';
+import { validateDraft, normalizeRoom } from '../core/model.js';
 import { validateConfig, sessionKey } from './config.js';
 export { getConfig, setConfig } from './config.js';
 // Only a public publishable/anon key belongs in the browser. RLS owns authorization.
@@ -35,9 +35,19 @@ export class SupabaseRepository {
   async getUser() { this.requireUser(); return this.request('/auth/v1/user'); }
   async get(id) { this.requireUser(); return (await this.request(`/rest/v1/escape_contents?id=eq.${encodeURIComponent(id)}&select=*`))[0] || null; }
   requireUser() { if (!this.session?.user?.id) throw Error('교사 로그인이 필요합니다.'); return this.session.user.id; }
-  async list() { this.requireUser(); const rows = await this.request('/rest/v1/escape_contents?select=*&order=updated_at.desc'); return rows.map(r => ({ ...r.document, id: r.id, roomCode: r.room_code, updatedAt: r.updated_at })); }
+  async list() { this.requireUser(); const rows = await this.request('/rest/v1/escape_contents?select=*&order=updated_at.desc'); return rows.map(r => normalizeRoom({ ...r.document, id: r.id, roomCode: r.room_code, updatedAt: r.updated_at })); }
+  async classStates() { this.requireUser();return this.request('/rest/v1/rpc/escape_class_states',{method:'POST',body:{}}); }
+  async importDraft(room) {
+    const existing=await this.get(room.id);if(existing)return existing;
+    const errors=validateDraft(room);if(errors.length)throw Error(errors[0]);
+    room=normalizeRoom(room);
+    try {await this.request('/rest/v1/escape_contents',{method:'POST',body:{id:room.id,owner_id:this.requireUser(),room_code:room.roomCode,title:room.title,document:room}});}
+    catch(error){if(error.code!=='23505'||!await this.get(room.id))throw error;}
+    const saved=await this.get(room.id);if(!saved)throw Error('서버 저장을 확인하지 못했습니다. 로컬 원본을 유지합니다.');return saved;
+  }
   async save(room) {
-    const errors = validateRoom(room); if (errors.length) throw Error(errors[0]);
+    const errors = validateDraft(room); if (errors.length) throw Error(errors[0]);
+    room=normalizeRoom(room);
     const owner = this.requireUser();
     const rows = await this.request('/rest/v1/escape_contents?on_conflict=id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=representation' }, body: { id: room.id, owner_id: owner, room_code: room.roomCode, title: room.title, document: room } });
     return { ...rows[0].document, updatedAt: rows[0].updated_at };

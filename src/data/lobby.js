@@ -1,5 +1,6 @@
 import { getConfig, SupabaseRepository } from './supabase.js';
 export const makeRecoveryToken = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
+export function studentJoinUrl(code,base){const url=new URL(base);url.search='';url.hash='/join?code='+encodeURIComponent(code);return url.href;}
 export function codeFromUrl(url = location.href) {
   const parsed = new URL(url);
   const candidate = parsed.hash.match(/^#\/join\/([0-9]{6})(?:$|\?)/)?.[1] || parsed.searchParams.get('code') || new URLSearchParams(parsed.hash.split('?')[1]).get('code') || '';
