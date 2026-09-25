@@ -14,6 +14,7 @@ create table realtime.test_messages(payload jsonb);
 create function realtime.send(p jsonb,e text,t text,b boolean) returns void language sql as $$ insert into realtime.test_messages values(p) $$;`);
 await db.query('insert into auth.users values($1),($2)',[A,B]);
 for(const file of ['001_foundation','002_live_lobby','003_live_play','004_teacher_controls','005_teacher_team_event_fix','006_results_and_reset']) await db.exec(await readFile(`supabase/${file}.sql`,'utf8'));
+if(process.argv.includes('--qr-question'))for(const file of ['007_qr_interaction','008_qr_question_type'])await db.exec(await readFile(`supabase/${file}.sql`,'utf8'));
 const as=async(role,uid='')=>{await db.exec(`reset role; set role ${role};`);await db.query("select set_config('request.jwt.claim.sub',$1,false)",[uid]);};
 const call=async(sql,args=[])=>(await db.query(sql,args)).rows[0].result;
 const teacher=(action,id)=>call('select public.escape_teacher_lobby($1,$2) result',[action,id]);

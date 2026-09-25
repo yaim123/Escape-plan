@@ -8,7 +8,7 @@ export function normalize(value, options = {}) {
 }
 export function checkAnswer(block, input) {
   const { questionType: type, answers = [] } = block;
-  if (['approval', 'condition'].includes(type)) return false;
+  if (['approval', 'condition', 'qr'].includes(type)) return false;
   if (type === 'switch') return input === true;
   if (type === 'number') return String(input).trim() !== '' && Number.isFinite(Number(input)) && answers.some(a => a.trim() !== '' && Number(a) === Number(input));
   if (['multi', 'order', 'match'].includes(type)) {

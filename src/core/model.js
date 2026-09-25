@@ -1,7 +1,7 @@
 import {qrToken} from './qr.js';
 export const VERSION = 1;
 export const BLOCK_TYPES = { story: '스토리', question: '문제', guide: '안내', wait: '조건 대기' };
-export const QUESTION_TYPES = { short: '단답형', number: '숫자형', choice: '객관식', multi: '복수 선택형', ox: 'OX형', order: '순서 배열형', match: '짝맞추기형', cipher: '암호 입력형', switch: '버튼 / 스위치형', condition: '조건 달성형', approval: '교사 승인형' };
+export const QUESTION_TYPES = { short: '단답형', number: '숫자형', choice: '객관식', multi: '복수 선택형', ox: 'OX형', order: '순서 배열형', match: '짝맞추기형', cipher: '암호 입력형', switch: '버튼 / 스위치형', condition: '조건 달성형', approval: '교사 승인형', qr: 'QR 스캔형' };
 export const uid = () => crypto.randomUUID();
 export function roomCode() { return String(100000 + crypto.getRandomValues(new Uint32Array(1))[0] % 900000); }
 export function newBlock(type = 'question') {
@@ -18,7 +18,7 @@ export function duplicateRoom(room) {
   copy.createdAt = copy.updatedAt = new Date().toISOString();
   if(copy.rules?.finalBlockId)copy.rules.finalBlockId=ids.get(copy.rules.finalBlockId)||null;
   for(const m of copy.qrMissions||[]){m.id=ids.get(m.id);m.result.targetId=ids.get(m.result.targetId)||null;for(const q of m.codes){q.id=ids.get(q.id);q.token=qrToken();}}
-  copy.content.forEach(b => { b.id = ids.get(b.id); b.unlock.conditions.forEach(c => { c.blockId = ids.get(c.blockId) || c.blockId; }); });
+  copy.content.forEach(b => { b.id = ids.get(b.id); if(b.qrId)b.qrId=ids.get(b.qrId)||b.qrId; b.unlock.conditions.forEach(c => { c.blockId = ids.get(c.blockId) || c.blockId; }); });
   return copy;
 }
 export function safeUrl(value) {
@@ -53,6 +53,7 @@ export function validateRoom(room) {
   for (const b of room.content) {
     if (!b || !BLOCK_TYPES[b.type] || typeof b.id !== 'string' || typeof b.title !== 'string' || typeof b.body !== 'string') { errors.push('블록 형식이 올바르지 않습니다.'); continue; }
     if (!QUESTION_TYPES[b.questionType]) errors.push('지원하지 않는 문제 유형입니다.');
+    if(b.type==='question'&&b.questionType==='qr'&&(qrKinds.get(b.qrId)!=='qr_scanned'||!['student','team'].includes(b.qrScope))) errors.push(`${b.title}: 통과 QR과 완료 범위를 선택하세요.`);
     for (const k of ['answers', 'options', 'hints']) if (!Array.isArray(b[k]) || b[k].some(v => typeof v !== 'string')) errors.push(`${b.title}: ${k} 형식 오류`);
     if (!b.unlock || !['AND', 'OR', 'N'].includes(b.unlock.mode) || !Array.isArray(b.unlock.conditions)) { errors.push('공개 조건 형식이 올바르지 않습니다.'); continue; }
     for (const c of b.unlock.conditions) {

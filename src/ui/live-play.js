@@ -9,6 +9,7 @@ import { BLOCK_TYPES } from '../core/model.js';
 
 export function liveAnswerControls(b) {
   if(b.type!=='question') return `<button class="btn primary" type="submit">${esc(b.buttonText||'계속하기')}</button>`;
+  if(b.questionType==='qr') return `<button class="btn primary" type="button" data-question-qr="${esc(b.id)}">QR 코드 스캔</button>`;
   if(b.questionType==='approval') return '<p class="callout">활동을 마친 뒤 교사의 승인을 기다려 주세요.</p>';
   if(['switch','condition'].includes(b.questionType)) return `<button class="btn primary" type="submit">${b.questionType==='switch'?'스위치 작동하기':'조건 확인하고 계속하기'}</button>`;
   let controls;
@@ -97,7 +98,8 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
   document.addEventListener('visibilitychange',visible);window.addEventListener('online',schedule);
   clockTimer=setInterval(drawClock,1000);
   root.onclick=async event=>{
-    if(event.target.closest('[data-qr-scan]')){if(writing||scanController)return;scanController=new AbortController();try{const token=await scanQrDialog(scanController.signal);if(token&&!disposed){const r=await lobby.rpc('escape_scan_qr',{p_token:client.token(code),p_qr:token});feedback=r.message;apply(r.game,true);}}catch(e){showError(e);}finally{scanController=null;}return;}
+    const scanButton=event.target.closest('[data-qr-scan],[data-question-qr]');
+    if(scanButton){if(writing||scanController)return;const blockId=scanButton.dataset.questionQr;scanController=new AbortController();try{const token=await scanQrDialog(scanController.signal);if(token&&!disposed){writing=true;const r=await lobby.rpc(blockId?'escape_answer_qr':'escape_scan_qr',{p_token:client.token(code),p_qr:token,...(blockId?{p_block:blockId}:{})});root.querySelector('#game-error').textContent='';feedback=r.message;apply(r.game,true);}}catch(e){showError(e);}finally{writing=false;scanController=null;if(queued){queued=false;schedule();}}return;}
     const manage=event.target.closest('[data-manage-student],[data-manage-team],[data-close-control]');if(manage){if(game.status==='finished')return;if(manage.hasAttribute('data-close-control')){root.querySelector('#control-panel').innerHTML='';panelTarget=null;}else openPanel(manage.dataset.manageStudent?{scope:'student',participant:manage.dataset.manageStudent}:{scope:'team',team:Number(manage.dataset.manageTeam)});return;}
     const btn=event.target.closest('[data-select],[data-approve],#finish-session,#pause-session,#reset-session,[data-hint]');if(!btn||writing)return;
     writing=true;btn.disabled=true;
