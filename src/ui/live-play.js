@@ -31,7 +31,7 @@ export function answerFromForm(block,form) {
 }
 const wrongTotal=p=>Object.values(p?.wrongCounts||{}).reduce((a,b)=>a+Number(b),0);
 export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,onReset,contentId}) {
-  let scanController,bgm;
+  let scanController,bgm,scanHolding=false,scanNext=null;
   const client=new LivePlayClient(lobby); let game=null, disposed=false, loading=false, queued=false, writing=false, signature='', feedback='', stopWatch, timer, debounce, clockTimer, receivedAt=Date.now(), panelTarget=null, panelRevision=null;
   root.innerHTML=`${teacher?`<div class="actions"><a class="btn class-back" href="#/editor/${esc(contentId)}">← 방탈출 편집</a></div>`:''}<div class="page-heading"><div><span class="eyebrow">${teacher?'LIVE PROGRESS':'LIVE PLAY'}</span><h1>${esc(initial.title)}</h1><p>${teacher?'학생과 팀의 진행 상태를 실시간으로 확인합니다.':'단서를 살펴보고 다음 콘텐츠를 열어보세요.'}</p></div><span id="game-connection" role="status">실시간 연결 중…</span></div><div id="game-error" role="alert"></div><p id="game-feedback" role="status"></p><p id="game-clock" role="timer"></p><div id="arrival-summary"></div>${teacher?'<div id="question-analysis"></div><div id="delay-warnings"></div>':''}<div id="game-progress"></div><div id="live-content"><p>진행 상태를 불러오는 중…</p></div>${teacher?'<div id="control-panel"></div><div id="control-audit"></div><div class="actions"><button class="btn primary" id="pause-session">전체 일시정지</button><button class="btn" id="finish-session">수업 종료</button><button class="btn" id="reset-session">수업 완료 및 초기화</button></div>':''}`;
   if(!teacher){root.classList.add('student-presented');root.insertAdjacentHTML('afterbegin','<div id="student-meta"></div>');}
@@ -96,6 +96,13 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
   const apply=(next, keepFeedback=false)=>{
     if(disposed)return;
     if(game && Number(next.revision)<Number(game.revision))return;
+    // Realtime can arrive before the scan RPC. Keep the newest playing state behind its receipt.
+    // Teacher pause/end/reset must still interrupt immediately.
+    if(scanHolding&&next.status==='playing'){
+      if(!scanNext||Number(next.revision)>=Number(scanNext.next.revision))scanNext={next,keepFeedback};
+      return;
+    }
+    if(next.status!=='playing'){scanHolding=false;scanNext=null;}
     if(!keepFeedback && game?.current?.id!==next.current?.id) feedback='';
     const changedBlock=game?.current?.id!==next.current?.id;
     game=next;receivedAt=Date.now();drawClock();root.querySelector('#game-error').textContent='';
@@ -110,6 +117,7 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
     try{apply(teacher?await client.teacher(initial.sessionId):await client.read(code));}catch(error){if(!teacher&&error.code==='42501'&&error.message.includes('참가 기록')){cleanup();lobby.forget(code);onReset?.();return;}showError(error);}finally{loading=false;if(queued&&!disposed){queued=false;schedule();}}
   };
   const schedule=()=>{if(!debounce&&!disposed)debounce=setTimeout(()=>{debounce=null;load();},180);};
+  const releaseScan=()=>{scanHolding=false;const pending=scanNext;scanNext=null;if(pending)apply(pending.next,pending.keepFeedback);};
   const visible=()=>{if(!document.hidden)schedule();};
   stopWatch=watchLobby(lobby.repo.config,initial.topic,schedule,status=>{if(!disposed)root.querySelector('#game-connection').textContent={connected:'실시간 연결됨',connecting:'실시간 연결 중…',reconnecting:'실시간 재연결 중…',error:'실시간 연결 확인 필요'}[status];});
   timer=setInterval(async()=>{if(!teacher){try{await lobby.student(code,'touch');}catch(error){showError(error);}}load();},25000);
@@ -118,10 +126,10 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
   root.onclick=async event=>{
     const scanButton=event.target.closest('[data-question-qr]');
     if(scanButton){if(writing||scanController)return;const blockId=scanButton.dataset.questionQr;scanController=new AbortController();
-      try{await scanQrDialog(scanController.signal,async token=>{writing=true;try{
+      try{await scanQrDialog(scanController.signal,async token=>{writing=true;scanHolding=true;try{
         const r=await lobby.rpc('escape_answer_qr',{p_token:client.token(code),p_qr:token,p_block:blockId});
-        feedback=r.message;apply(r.game,true);return {keepOpen:r.game.status==='playing'&&r.game.current?.id===blockId,message:r.message};
-      }finally{writing=false;}});}finally{scanController=null;if(queued){queued=false;schedule();}}return;
+        feedback=r.message;apply(r.game,true);return {keepOpen:r.game.status==='playing'&&!r.game.result&&r.game.current?.id===blockId,message:r.message,duplicate:r.duplicate,progress:r.qrScan,onConfirm:releaseScan};
+      }catch(error){releaseScan();throw error;}finally{writing=false;if(queued){queued=false;schedule();}}});}finally{scanController=null;releaseScan();if(queued){queued=false;schedule();}}return;
     }
     const manage=event.target.closest('[data-manage-student],[data-manage-team],[data-close-control]');if(manage){if(game.status==='finished')return;if(manage.hasAttribute('data-close-control')){root.querySelector('#control-panel').innerHTML='';panelTarget=null;}else openPanel(manage.dataset.manageStudent?{scope:'student',participant:manage.dataset.manageStudent}:{scope:'team',team:Number(manage.dataset.manageTeam)});return;}
     const btn=event.target.closest('[data-select],[data-approve],#finish-session,#pause-session,#reset-session,[data-hint]');if(!btn||writing)return;

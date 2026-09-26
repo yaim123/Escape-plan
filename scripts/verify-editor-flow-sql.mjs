@@ -17,6 +17,7 @@ for(const file of ['001_foundation','002_live_lobby','003_live_play','004_teache
 if(process.argv.includes('--ux'))await db.exec(await readFile('supabase/010_lobby_assets_and_immersive.sql','utf8'));
 if(process.argv.includes('--media')){await (await import('./storage-fixture.mjs')).storageFixture(db);await db.exec(await readFile('supabase/011_stages_display_and_media.sql','utf8'));}
 if(process.argv.includes('--tools'))await db.exec(await readFile('supabase/012_analysis_print_and_block_library.sql','utf8'));
+if(process.argv.includes('--qr-ux'))await db.exec(await readFile('supabase/013_qr_scan_receipt.sql','utf8'));
 const as=async(role,uid='')=>{await db.exec(`reset role; set role ${role};`);await db.query("select set_config('request.jwt.claim.sub',$1,false)",[uid]);};
 const call=async(sql,args=[])=>(await db.query(sql,args)).rows[0].result;
 const teacher=(action,id)=>call('select public.escape_teacher_lobby($1,$2) result',[action,id]);
@@ -47,12 +48,13 @@ for(const mode of ['individual','team'])for(const scope of ['student','team'])fo
  await submit(tokens[0],intro,null);if(mode==='individual')await submit(tokens[1],intro,null);
  await assert.rejects(answerQr(tokens[0],q,newQr()),/이 문제의 QR/);assert.equal((await play(tokens[0])).qr[0].found,0);
  await as('authenticated',A);await control(sid,'pause');await as('anon');await assert.rejects(scan(tokens[0],m.codes[0]),/진행 중/);await as('authenticated',A);await control(sid,'resume');await as('anon');
- await answerQr(tokens[0],q,m.codes[0]);
+ const first=await answerQr(tokens[0],q,m.codes[0]);
+ if(process.argv.includes('--qr-ux'))assert.deepEqual(first.qrScan,{mode:condition,found:1,required:condition==='ALL'?3:condition==='ANY'?1:2,done:condition==='ANY'});
  if(condition!=='ANY'){
   assert.equal((await scan(tokens[0],m.codes[0])).duplicate,true);assert.equal((await play(tokens[0])).qr[0].found,1);
-  await scan(tokens[0],m.codes[1]);
+  const second=await scan(tokens[0],m.codes[1]);if(process.argv.includes('--qr-ux')){assert.equal(second.qrScan.found,condition==='UNIQUE_MEMBER'?1:2);assert.equal(second.qrScan.required,condition==='ALL'?3:2);}
   if(condition==='ALL')await scan(tokens[0],m.codes[2]);
-  if(condition==='UNIQUE_MEMBER'){assert.equal((await play(tokens[0])).current.id,q.id);await scan(tokens[1],m.codes[2]);}
+  if(condition==='UNIQUE_MEMBER'){assert.equal((await play(tokens[0])).current.id,q.id);const last=await scan(tokens[1],m.codes[2]);if(process.argv.includes('--qr-ux'))assert.deepEqual(last.qrScan,{mode:'UNIQUE_MEMBER',found:2,required:2,done:true});}
  }
  assert.equal((await play(tokens[0])).current.id,next.id);assert.deepEqual((await play(tokens[0])).qr,[]);
  await assert.rejects(scan(tokens[0],m.codes[0]),/아직 사용할 수/);
@@ -109,5 +111,18 @@ await as('postgres');assert.equal((await db.query('select count(*) n from public
  assert.deepEqual(await call('select public.escape_class_states() result'),[]);
  const next=await teacher('open',r.id);assert.notEqual(next.sessionId,sid);assert.equal(next.status,'lobby');assert.equal((await teacher('open',r.id)).sessionId,next.sessionId);assert.equal((await history(r.id)).length,1);
  await db.query('delete from public.escape_contents where id=$1',[r.id]);
+}
+if(process.argv.includes('--qr-ux')){
+ const {r,q,m}=fixture('team','team','ALL');r.content=[q];m.codes=m.codes.slice(0,2);const sid=(await save(r)).sessionId;
+ await as('anon');await join(r,tokens[0],1);await join(r,tokens[1],2);await lobby(tokens[0],1);await lobby(tokens[1],2);
+ await as('authenticated',A);await teacher('start',sid);await as('anon');
+ const first=await answerQr(tokens[0],q,m.codes[0]);assert.deepEqual(first.qrScan,{mode:'ALL',found:1,required:2,done:false});
+ assert.equal((await play(tokens[1])).qr[0].found,0);const other=await scan(tokens[1],m.codes[0]);assert.equal(other.qrScan.found,1);
+ const last=await answerQr(tokens[0],q,m.codes[1]);assert.deepEqual(last.qrScan,{mode:'ALL',found:2,required:2,done:true});assert.ok(last.game.result);assert.deepEqual(last.game.qr,[]);
+ assert.equal((await play(tokens[1])).qr[0].found,1);await assert.rejects(scan(tokens[0],m.codes[1]));
+ await assert.rejects(call('select escape_private.scan_current_qr($1,$2) result',[tokens[1],m.codes[1].token]),/permission denied/);
+ assert.deepEqual(Object.keys(last.qrScan).sort(),['done','found','mode','required']);
+ await as('authenticated',A);await db.query('delete from public.escape_contents where id=$1',[r.id]);
+ console.log('PASS 013 receipt: exact ANY/ALL/N/active UNIQUE_MEMBER counts, final result, direct URL, duplicate, separate teams, private grants');
 }
 await db.close();console.log('PASS draft/start boundary, wait removal, teacher skip/move precedence, class reuse and complete fixture cleanup');

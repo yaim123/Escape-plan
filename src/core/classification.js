@@ -1,4 +1,4 @@
-export const GRADES=['중1','중2','중3','공통','기타'];
+export const GRADES=['중1','중2','중3','고1','고2','고3','공통','기타'];
 export const SUBJECTS=['과학','수학','국어','영어','사회','기술·가정','정보','기타'];
 export const GENRES=['공포','미스터리','추리','모험','탐험','교육','코믹','SF','판타지','기타'];
 export function parseTags(value){const seen=new Set();return (Array.isArray(value)?value:String(value||'').split(/[,，\n]/)).map(t=>String(t).trim().slice(0,50)).filter(t=>{const key=t.toLocaleLowerCase();if(!t||seen.has(key))return false;seen.add(key);return true;}).slice(0,30);}
