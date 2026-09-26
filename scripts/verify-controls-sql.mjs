@@ -17,6 +17,7 @@ for(const file of ['001_foundation','002_live_lobby','003_live_play','004_teache
 if(process.argv.includes('--results'))await db.exec(await readFile('supabase/006_results_and_reset.sql','utf8'));
 if(process.argv.includes('--qr-question')||process.argv.includes('--editor-flow'))for(const file of ['007_qr_interaction','008_qr_question_type'])await db.exec(await readFile(`supabase/${file}.sql`,'utf8'));
 if(process.argv.includes('--editor-flow'))await db.exec(await readFile('supabase/009_editor_flow_and_block_qr.sql','utf8'));
+if(process.argv.includes('--ux'))await db.exec(await readFile('supabase/010_lobby_assets_and_immersive.sql','utf8'));
 const as=async(role,uid='')=>{await db.exec(`reset role; set role ${role};`);await db.query("select set_config('request.jwt.claim.sub',$1,false)",[uid]);};
 const call=async(sql,args=[])=>(await db.query(sql,args)).rows[0].result;
 const teacher=(action,id)=>call('select public.escape_teacher_lobby($1,$2) result',[action,id]);

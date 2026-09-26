@@ -1,3 +1,4 @@
+import {authRedirectUrl} from './auth-callback.js';
 import { validateDraft, normalizeRoom } from '../core/model.js';
 import { validateConfig, sessionKey } from './config.js';
 export { getConfig, setConfig } from './config.js';
@@ -25,7 +26,7 @@ export class SupabaseRepository {
   }
   storeSession(data) { if (data?.access_token) { this.session = { ...data, expires_at: data.expires_at || Date.now() / 1000 + data.expires_in }; this.storage?.setItem(this.storageKey, JSON.stringify(this.session)); } }
   async signIn(email, password) { const data = await this.request('/auth/v1/token?grant_type=password', { method: 'POST', body: { email, password }, auth: false }); this.storeSession(data); return data; }
-  async signUp(email, password) { const data = await this.request('/auth/v1/signup', { method: 'POST', body: { email, password }, auth: false }); this.storeSession(data); return data; }
+  async signUp(email, password) { const data = await this.request('/auth/v1/signup?redirect_to='+encodeURIComponent(authRedirectUrl()), { method: 'POST', body: { email, password }, auth: false }); this.storeSession(data); return data; }
   async refresh() {
     if (this.refreshing) return this.refreshing;
     this.refreshing = (async () => { try { const data = await this.request('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: this.session.refresh_token }, auth: false }); this.storeSession(data); } catch (error) { if (error.status === 400 || error.status === 401) { this.session = null; this.storage?.removeItem(this.storageKey); } throw error; } finally { this.refreshing = null; } })();

@@ -10,8 +10,8 @@ export function modal(html, onMount) {
   d.querySelector('.modal-close').onclick = () => d.close();
   if (!d.open) d.showModal(); onMount?.(d); return d;
 }
-export function confirmDialog(title, message, actionLabel = '삭제') {
-  return new Promise(resolve => { const d = modal(`<div class="modal-body"><h2>${esc(title)}</h2><p>${esc(message)}</p><div class="actions end">${button('취소', 'cancel')}${button(actionLabel, 'confirm', 'danger')}</div></div>`); let confirmed = false; d.querySelector('[data-action="cancel"]').onclick = () => d.close(); d.querySelector('[data-action="confirm"]').onclick = () => { confirmed = true; d.close(); }; d.addEventListener('close', () => resolve(confirmed), { once: true }); });
+export function confirmDialog(title, message, actionLabel = '삭제', cancelLabel = '취소') {
+  return new Promise(resolve => { const d = modal(`<div class="modal-body"><h2>${esc(title)}</h2><p>${esc(message)}</p><div class="actions end">${button(cancelLabel, 'cancel')}${button(actionLabel, 'confirm', 'danger')}</div></div>`); let confirmed = false; d.querySelector('[data-action="cancel"]').onclick = () => d.close(); d.querySelector('[data-action="confirm"]').onclick = () => { confirmed = true; d.close(); }; d.addEventListener('close', () => resolve(confirmed), { once: true }); });
 }
 export const formatDate = date => new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric' }).format(new Date(date));
 export const formatTime = seconds => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;

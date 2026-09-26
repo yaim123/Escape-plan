@@ -1,4 +1,3 @@
-import {canRun} from './validation.js';
 import { esc, icon, button, formatDate, modal, toast, confirmDialog } from './dom.js';
 import { newRoom, duplicateRoom, parseImport } from '../core/model.js';
 import { exportRoom } from '../data/storage.js';
@@ -15,7 +14,7 @@ export async function renderLibrary(root, app) {
   let filter = 'all', query = '';
   const draw = () => {
     const shown = rooms.filter(r => (filter === 'all' || r.playMode === filter) && `${r.title} ${r.description} ${r.subject}`.toLowerCase().includes(query.toLowerCase()));
-    root.querySelector('#room-grid').innerHTML = shown.map((r, i) => `<article class="room-card" data-id="${r.id}"><button class="room-cover color-${i % 4}" data-action="edit" aria-label="${esc(r.title)} 편집"><div class="cover-top"><span class="tag">${esc(r.subject)}</span><span class="cover-mode">${icon(r.playMode === 'team' ? 'users' : 'key')}${r.playMode === 'team' ? '팀전' : '개인전'}</span></div><div class="cover-main"><span class="cover-label">ESCAPE ROOM</span><h2>${esc(r.title)}</h2></div><div class="cover-bottom"><span>${r.content.length}개의 단서</span><span class="cover-arrow">${icon('arrow')}</span></div></button><div class="room-card-body"><h3>${esc(r.title)}</h3><p>${esc(r.description || '새로운 이야기를 채워주세요.')}</p><div class="room-meta"><span>${icon('clock')}${formatDate(r.updatedAt)} 수정</span><span>코드 ${esc(r.roomCode)}</span></div><div class="card-actions">${button(hasClass(r.id)?'수업으로 돌아가기':'방탈출 시작','lobby','primary','play')}${button('편집하기','edit','subtle','file')}${button('테스트','test','','play')}<details class="dropdown"><summary aria-label="콘텐츠 메뉴">더보기</summary><div>${app.repo.mode==='cloud'?button('수업 기록','history','','file'):''}${button('복제','duplicate','','copy')}${button('JSON 내보내기','export','','download')}${button('삭제','delete','danger-text','trash')}</div></details></div></div></article>`).join('') + ((!query && filter === 'all') ? `<button class="new-room-card" data-action="create"><span>${icon('plus')}</span><strong>새로운 방탈출 만들기</strong><p>다음 모험은 어떤 이야기인가요?</p></button>` : '');
+    root.querySelector('#room-grid').innerHTML = shown.map((r, i) => `<article class="room-card" data-id="${r.id}"><button class="room-cover color-${i % 4}" data-action="edit" aria-label="${esc(r.title)} 편집"><div class="cover-top"><span class="tag">${esc(r.subject)}</span><span class="cover-mode">${icon(r.playMode === 'team' ? 'users' : 'key')}${r.playMode === 'team' ? '팀전' : '개인전'}</span></div><div class="cover-main"><span class="cover-label">ESCAPE ROOM</span><h2>${esc(r.title)}</h2></div><div class="cover-bottom"><span>${r.content.length}개의 단서</span><span class="cover-arrow">${icon('arrow')}</span></div></button><div class="room-card-body"><h3>${esc(r.title)}</h3><p>${esc(r.description || '새로운 이야기를 채워주세요.')}</p><div class="room-meta"><span>${icon('clock')}${formatDate(r.updatedAt)} 수정</span><span>코드 ${esc(r.roomCode)}</span></div><div class="card-actions">${button(hasClass(r.id)?'수업으로 돌아가기':'방탈출 시작','lobby','primary','play')}${button('편집하기','edit','subtle','file')}${button('테스트','test','','play')}<details class="dropdown"><summary aria-label="콘텐츠 메뉴">더보기</summary><div>${app.repo.mode==='cloud'?button('수업 기록','history','','file'):''}${button('사본 만들기','duplicate','','copy')}${button('JSON 내보내기','export','','download')}${button('삭제','delete','danger-text','trash')}</div></details></div></div></article>`).join('') + ((!query && filter === 'all') ? `<button class="new-room-card" data-action="create"><span>${icon('plus')}</span><strong>새로운 방탈출 만들기</strong><p>다음 모험은 어떤 이야기인가요?</p></button>` : '');
     if (!shown.length && (query || filter !== 'all')) root.querySelector('#room-grid').innerHTML = '<div class="empty"><h3>아직 일치하는 방탈출이 없어요</h3><p>다른 검색어나 플레이 방식을 선택해주세요.</p></div>';
   };
   draw();
@@ -30,12 +29,12 @@ export async function renderLibrary(root, app) {
         case 'example': { const r = exampleRoom(); await app.repo.save(r); app.navigate(`editor/${r.id}`); break; }
         case 'edit': app.navigate(`editor/${room.id}`); break;
         case 'history': app.navigate('history/' + room.id); break;
-        case 'lobby': if(hasClass(room.id)||canRun(room))app.navigate('lobby/' + room.id); break;
-        case 'test': if(canRun(room))app.navigate(`test/${room.id}`); break;
-        case 'duplicate': { await app.repo.save(duplicateRoom(room)); toast('방탈출을 복제했습니다. 새로운 방 코드가 발급되었어요.'); await renderLibrary(root, app); break; }
+        case 'lobby': app.navigate('lobby/' + room.id); break;
+        case 'test': app.navigate(`test/${room.id}`); break;
+        case 'duplicate': { await app.repo.save(duplicateRoom(room)); toast('방탈출 사본을 만들었습니다. 새로운 방 코드가 발급되었어요.'); await renderLibrary(root, app); break; }
         case 'export': exportRoom(room); toast('JSON 백업을 내보냈습니다.'); break;
         case 'delete': if (await confirmDialog('방탈출을 삭제할까요?', `“${room.title}” 콘텐츠가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.`)) { await app.repo.remove(room.id); toast('방탈출을 삭제했습니다.'); await renderLibrary(root, app); } break;
-        case 'import': { const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,application/json'; input.onchange = async () => { try { const f = input.files[0]; if (!f) return; if (f.size > 2_000_000) throw Error('JSON 파일은 2MB 이하여야 합니다.'); const r = parseImport(await f.text()); r.title = r.title.replace(/ \(복사\)$/, ''); await app.repo.save(r); toast('새로운 콘텐츠로 불러왔습니다.'); await renderLibrary(root, app); } catch (err) { toast(err.message, true); } }; input.click(); break; }
+        case 'import': { const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,application/json'; input.onchange = async () => { try { const f = input.files[0]; if (!f) return; if (f.size > 2_000_000) throw Error('JSON 파일은 2MB 이하여야 합니다.'); const r = parseImport(await f.text()); r.title = r.title.replace(/ \((?:복사|사본)\)$/, ''); await app.repo.save(r); toast('새로운 콘텐츠로 불러왔습니다.'); await renderLibrary(root, app); } catch (err) { toast(err.message, true); } }; input.click(); break; }
       }
     } catch (err) { toast(err.message, true); }
   };

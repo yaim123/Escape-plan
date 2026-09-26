@@ -15,6 +15,7 @@ export class LobbyClient {
   forget(code) { this.storage.removeItem(this.key(code)); }
   rpc(name, body, teacher = false) { return this.repo.request(`/rest/v1/rpc/${name}`, { method: 'POST', body, auth: teacher }); }
   teacher(action, id) { this.repo.requireUser(); return this.rpc('escape_teacher_lobby', { p_action: action, p_id: id }, true); }
+  snapshot(contentId,action='inspect',info={}) {this.repo.requireUser();return this.rpc('escape_lobby_snapshot',{p_content:contentId,p_action:action,p_session:info.state?.sessionId||null,p_version:info.version||null,p_snapshot_version:info.snapshotVersion||null,p_allow_assets:action!=='inspect',p_failed_assets:info.failedAssets||[]},true);}
   async join(code, identity) {
     const previous = this.saved(code), token = previous?.token || makeRecoveryToken();
     // Persist BEFORE sending: a lost response/reload retries the same identity.

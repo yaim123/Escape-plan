@@ -1,3 +1,5 @@
+import {isImmersive,immersiveHtml,mountImmersive} from './immersive.js';
+import {mountAssetFallback} from './asset-fallback.js';
 import {displayAttributes} from './display.js';
 import { resultHtml, resultTable, resetChoice } from './results.js';
 import {qrProgressHtml,scanQrDialog} from './qr.js';
@@ -26,10 +28,10 @@ export function answerFromForm(block,form) {
   return ['multi','order','match'].includes(block.questionType)?data.getAll('answer'):data.get('answer');
 }
 const wrongTotal=p=>Object.values(p?.wrongCounts||{}).reduce((a,b)=>a+Number(b),0);
-export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,onReset}) {
+export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,onReset,contentId}) {
   let scanController;
   const client=new LivePlayClient(lobby); let game=null, disposed=false, loading=false, queued=false, writing=false, signature='', feedback='', stopWatch, timer, debounce, clockTimer, receivedAt=Date.now(), panelTarget=null, panelRevision=null;
-  root.innerHTML=`${teacher?'<a class="btn class-back" href="#/library">← 내 방탈출로 돌아가기</a>':''}<div class="page-heading"><div><span class="eyebrow">${teacher?'LIVE PROGRESS':'LIVE PLAY'}</span><h1>${esc(initial.title)}</h1><p>${teacher?'학생과 팀의 진행 상태를 실시간으로 확인합니다.':'단서를 살펴보고 다음 콘텐츠를 열어보세요.'}</p></div><span id="game-connection" role="status">실시간 연결 중…</span></div><div id="game-error" role="alert"></div><p id="game-feedback" role="status"></p><p id="game-clock" role="timer"></p><div id="arrival-summary"></div><div id="game-progress"></div><div id="live-content"><p>진행 상태를 불러오는 중…</p></div>${teacher?'<div id="control-panel"></div><div id="control-audit"></div><div class="actions"><button class="btn primary" id="pause-session">전체 일시정지</button><button class="btn" id="finish-session">수업 종료</button><button class="btn" id="reset-session">수업 완료 및 초기화</button></div>':''}`;
+  root.innerHTML=`${teacher?`<div class="actions"><a class="btn class-back" href="#/library">← 내 방탈출로 돌아가기</a><a class="btn" href="#/editor/${esc(contentId)}">방탈출 편집</a></div>`:''}<div class="page-heading"><div><span class="eyebrow">${teacher?'LIVE PROGRESS':'LIVE PLAY'}</span><h1>${esc(initial.title)}</h1><p>${teacher?'학생과 팀의 진행 상태를 실시간으로 확인합니다.':'단서를 살펴보고 다음 콘텐츠를 열어보세요.'}</p></div><span id="game-connection" role="status">실시간 연결 중…</span></div><div id="game-error" role="alert"></div><p id="game-feedback" role="status"></p><p id="game-clock" role="timer"></p><div id="arrival-summary"></div><div id="game-progress"></div><div id="live-content"><p>진행 상태를 불러오는 중…</p></div>${teacher?'<div id="control-panel"></div><div id="control-audit"></div><div class="actions"><button class="btn primary" id="pause-session">전체 일시정지</button><button class="btn" id="finish-session">수업 종료</button><button class="btn" id="reset-session">수업 완료 및 초기화</button></div>':''}`;
   const showError=error=>{if(!disposed) root.querySelector('#game-error').textContent=error.message||error;};
   root.querySelector('#game-clock').insertAdjacentHTML('afterend','<div id="qr-progress"></div>');
   const cleanup=()=>{disposed=true;scanController?.abort();stopWatch?.();clearInterval(timer);clearInterval(clockTimer);clearTimeout(debounce);client.dispose();document.removeEventListener('visibilitychange',visible);window.removeEventListener('online',schedule);return true;};
@@ -42,11 +44,17 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
     if(game.status==='paused'){signature='paused';root.querySelector('#game-feedback').textContent='';root.querySelector('#game-progress').innerHTML='';root.querySelector('#live-content').innerHTML='<section class="pause-screen" role="alert"><div><span class="eyebrow">PAUSED</span><h2>교사가 게임을 잠시 일시정지했습니다. 잠시 기다려 주세요.</h2><p>재개하면 멈춘 위치에서 계속 진행합니다.</p></div></section>';return;}
     root.querySelector('#game-feedback').textContent=feedback;
     root.querySelector('#game-progress').innerHTML=`<section class="play-progress panel"><span>${game.playMode==='team'?`${game.team}조 · 팀원 ${p.memberNumber} · ${esc(p.role)}`:'개인전'}</span><strong>진행 ${p.completedCount}/${p.totalCount}</strong><span>내 오답 ${wrongTotal(p)}회</span><progress max="${Math.max(1,p.totalCount)}" value="${p.completedCount}"></progress></section>`;
+    const sceneProgress=root.querySelector('[data-scene-progress]');if(sceneProgress)sceneProgress.textContent=`진행 ${p.completedCount}/${p.totalCount}`;
     const nextSignature=JSON.stringify([b,game.available]);
     const drawHints=()=>{const el=root.querySelector('#live-hints');if(el)el.innerHTML=`${(game.revealedHints||[]).map((h,i)=>`<p class="callout">힌트 ${i+1}: ${esc(h)}</p>`).join('')}${game.hasMoreHints?'<button class="btn" data-hint>다음 힌트 보기</button>':''}`;};
     if(signature===nextSignature){drawHints();return;} // Keep in-progress input on realtime/heartbeat updates.
     signature=nextSignature;
     root.querySelector('#live-content').innerHTML=b?`<section ${displayAttributes(b,game.theme)}><div class="content-body"><div class="eyebrow">STAGE ${esc(b.stage)} · ${esc(BLOCK_TYPES[b.type])}</div><h2>${esc(b.title)}</h2><p class="pre-line story-body">${esc(b.body)}</p>${mediaHtml(b.media)}<form id="live-answer">${liveAnswerControls(b)}</form><div id="live-hints"></div></div></section>${game.available.length>1?`<nav class="actions available-content" aria-label="공개된 콘텐츠">${game.available.map(item=>`<button class="btn" data-select="${esc(item.id)}" ${item.id===b.id?'disabled':''}>${esc(item.title)}</button>`).join('')}</nav>`:''}`:`<section class="panel"><h2>${p.completedCount===p.totalCount?'현재 콘텐츠를 모두 완료했습니다.':'다른 팀원 또는 조건을 기다리고 있습니다.'}</h2><p>진행 상태가 바뀌면 자동으로 다음 콘텐츠가 표시됩니다.</p></section>`;
+    if(isImmersive(b)){
+      root.querySelector('#live-content').innerHTML=immersiveHtml(b,{title:initial.title,progress:`진행 ${p.completedCount}/${p.totalCount}`,time:root.querySelector('#game-clock').textContent,connection:root.querySelector('#game-connection').textContent});
+      mountImmersive(root,async()=>{if(writing||game.status!=='playing')return;writing=true;try{const result=await client.submit(code,b.id,null);apply(result.game,true);}finally{writing=false;if(queued){queued=false;schedule();}}});
+    }
+    mountAssetFallback(root);
     drawHints();
     root.querySelector('#live-answer')?.addEventListener('submit',async event=>{
       event.preventDefault();if(writing||game.status!=='playing')return;writing=true;
@@ -76,7 +84,7 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
     if(auditOpen)root.querySelector('#control-audit details').open=true;
     const stale=root.querySelector('#control-stale');if(stale)stale.textContent=panelRevision!==game.revision?'진행 상태가 변경되었습니다. 대상 관리 버튼을 다시 눌러 최신 상태를 확인하세요.':'';
   };
-  const drawClock=()=>{if(!game?.timing||disposed)return;const ms=!teacher&&(game.result||game.completedElapsedMs!=null)?(game.result?.elapsedMs??game.completedElapsedMs):game.timing.elapsedMs+(game.status==='playing'?Date.now()-receivedAt:0);root.querySelector('#game-clock').textContent=`유효 플레이 시간 ${elapsedLabel(ms)} · 일시정지 시간 제외`;};
+  const drawClock=()=>{if(!game?.timing||disposed)return;const ms=!teacher&&(game.result||game.completedElapsedMs!=null)?(game.result?.elapsedMs??game.completedElapsedMs):game.timing.elapsedMs+(game.status==='playing'?Date.now()-receivedAt:0);root.querySelector('#game-clock').textContent=`유효 플레이 시간 ${elapsedLabel(ms)} · 일시정지 시간 제외`;const info=root.querySelector('[data-scene-time]');if(info)info.textContent=root.querySelector('#game-clock').textContent;const connection=root.querySelector('[data-scene-connection]');if(connection)connection.textContent=root.querySelector('#game-connection').textContent;};
   const openPanel=target=>{panelTarget=target;panelRevision=game.revision;root.querySelector('#control-panel').innerHTML=controlPanel(game,target);const form=root.querySelector('#teacher-control-form');if(!form)return;form.onchange=()=>{const action=form.elements.action.value;for(const field of form.querySelectorAll('[data-control-field]'))field.hidden=!(field.dataset.controlField==='block'?['move','unlock'].includes(action):field.dataset.controlField===action);};form.onsubmit=async event=>{event.preventDefault();if(writing)return;writing=true;const btn=form.querySelector('button[type=submit]');btn.disabled=true;try{const action=form.elements.action.value;const result=await client.control(initial.sessionId,action,{p_scope:target.scope,p_participant:target.participant||null,p_team:target.team||null,p_block:['move','unlock'].includes(action)?form.elements.block.value:null,p_stage:action==='stage'?form.elements.stage.value:null,p_new_team:action==='team'?Number(form.elements.team.value):null},panelRevision);apply(result);root.querySelector('#control-panel').innerHTML='';panelTarget=null;}catch(error){showError(error);schedule();}finally{writing=false;btn.disabled=false;}};};
   const apply=(next, keepFeedback=false)=>{
     if(disposed)return;

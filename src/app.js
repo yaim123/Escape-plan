@@ -1,3 +1,4 @@
+import {readAuthCallback,verifyAuthCallback} from './data/auth-callback.js';
 import { LocalRepository } from './data/storage.js';
 import { getConfig, SupabaseRepository } from './data/supabase.js';
 import { renderStudentEntry, renderTeacherLobby } from './ui/lobby.js';
@@ -47,5 +48,12 @@ async function render() {
     view.innerHTML = `<div class="empty"><h1>작업 공간을 열지 못했습니다</h1><p>${esc(err.message)}</p><div class="actions center"><a class="btn primary" href="#/settings">저장 공간 설정</a><a class="btn" href="#/library">내 방탈출</a></div></div>`;
   } finally { transitioning = false; if (location.hash !== requestedHash && location.hash !== activeHash) render(); }
 }
+const callback = readAuthCallback(location.href);
+if (callback) {
+  // Clear callback credentials before rendering or network access; login/import stay separate.
+  history.replaceState(null,'',location.pathname+'#/auth-confirm');
+  document.querySelector('#app').innerHTML='<main class="student-shell"><p>이메일 인증 확인 중…</p></main>';
+  const result=await verifyAuthCallback(callback,config);
+  document.querySelector('#app').innerHTML=`<main class="student-shell"><section class="panel"><h1>${result.ok?'이메일 인증이 완료되었습니다.':'이메일 인증 링크 안내'}</h1><p>${esc(result.message)}</p><a class="btn primary" href="#/login">로그인하기</a></section></main>`;
+} else render();
 window.addEventListener('hashchange', render);
-render();

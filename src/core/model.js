@@ -1,7 +1,7 @@
 import {qrToken,newQrMission} from './qr.js';
 export const VERSION = 1;
 export const BLOCK_TYPES = { story: '스토리', question: '문제', guide: '안내' };
-export const DISPLAY_TYPES = {card:'일반 카드',theme:'테마 배경',image:'이미지 배경'};
+export const DISPLAY_TYPES = {card:'일반 카드',theme:'테마 배경',image:'이미지 배경',immersive:'몰입형 스토리'};
 export const QUESTION_TYPES = { short: '단답형', number: '숫자형', choice: '객관식', multi: '복수 선택형', ox: 'OX형', order: '순서 배열형', match: '짝맞추기형', cipher: '암호 입력형', switch: '버튼 / 스위치형', condition: '조건 달성형', approval: '교사 승인형', qr: 'QR 스캔형' };
 export const uid = () => crypto.randomUUID();
 export function roomCode() { return String(100000 + crypto.getRandomValues(new Uint32Array(1))[0] % 900000); }
@@ -16,7 +16,7 @@ export function duplicateRoom(room) {
   const copy = normalizeRoom(room);
   const ids = new Map(copy.content.map(b => [b.id, uid()]));
   for(const m of copy.qrMissions||[]){ids.set(m.id,uid());for(const q of m.codes)ids.set(q.id,uid());}
-  copy.id = uid(); copy.roomCode = roomCode(); copy.title += ' (복사)';
+  copy.id = uid(); copy.roomCode = roomCode(); while(copy.roomCode===room.roomCode)copy.roomCode=roomCode(); copy.title += ' (사본)';
   copy.createdAt = copy.updatedAt = new Date().toISOString();
   if(copy.rules?.finalBlockId)copy.rules.finalBlockId=ids.get(copy.rules.finalBlockId)||null;
   for(const m of copy.qrMissions||[]){m.id=ids.get(m.id);m.result.targetId=ids.get(m.result.targetId)||null;for(const q of m.codes){q.id=ids.get(q.id);q.token=qrToken();}}
@@ -54,7 +54,7 @@ export function validateRoom(room) {
     }
   }
   for (const b of room.content) {
-    if (!b || !BLOCK_TYPES[b.type] || typeof b.id !== 'string' || typeof b.title !== 'string' || typeof b.body !== 'string') { errors.push('블록 형식이 올바르지 않습니다.'); continue; }
+    if (!b || !BLOCK_TYPES[b.type] || ! /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(b.id||'') || typeof b.title !== 'string' || typeof b.body !== 'string') { errors.push('블록 형식이 올바르지 않습니다.'); continue; }
     if (!QUESTION_TYPES[b.questionType]) errors.push('지원하지 않는 문제 유형입니다.');
     if(b.type==='question'&&b.questionType==='qr'&&((b.qrMissionId?qrKinds.get(b.qrMissionId)!=='qr_complete':qrKinds.get(b.qrId)!=='qr_scanned')||!['student','team'].includes(b.qrScope))) errors.push(`${b.title}: QR과 완료 범위를 선택하세요.`);
     for (const k of ['answers', 'options', 'hints']) if (!Array.isArray(b[k]) || b[k].some(v => typeof v !== 'string')) errors.push(`${b.title}: ${k} 형식 오류`);
@@ -64,8 +64,9 @@ export function validateRoom(room) {
       if (qrKinds.has(c.blockId)?qrKinds.get(c.blockId)!==c.event:!['complete', 'button', 'approved'].includes(c.event)) errors.push('지원하지 않는 조건 이벤트입니다.');
     }
     if (!b.assignment || !['all', 'auto', 'member', 'role'].includes(b.assignment.mode) || !b.completion || !['any', 'all', 'member', 'role', 'n', 'assigned'].includes(b.completion.mode)) errors.push('대상 또는 완료 조건이 올바르지 않습니다.');
-    if (!Array.isArray(b.media) || b.media.some(m => !['image', 'audio', 'video'].includes(m.type) || !safeUrl(m.url))) errors.push('미디어에는 올바른 http(s) URL을 사용하세요.');
-    if (!b.normalization || !['card', 'theme', 'image','full'].includes(b.display) || typeof b.stage !== 'string' || typeof b.buttonText !== 'string') errors.push(`${b.title}: 블록 표시 설정이 올바르지 않습니다.`);
+    if (!Array.isArray(b.media) || b.media.some(m => !['image', 'audio', 'video'].includes(m.type))) errors.push('미디어에는 올바른 http(s) URL을 사용하세요.');
+    if (!b.normalization || !['card', 'theme', 'image','full','immersive'].includes(b.display) || typeof b.stage !== 'string' || typeof b.buttonText !== 'string') errors.push(`${b.title}: 블록 표시 설정이 올바르지 않습니다.`);
+    if(b.display==='immersive'&&b.type!=='story')errors.push(`${b.title}: 몰입형 표시는 스토리에서만 사용합니다.`);
     if (!Number.isFinite(b.points) || b.points < 0) errors.push('문제 점수는 0 이상의 숫자여야 합니다.');
     if (b.unlock.mode === 'N' && (!Number.isInteger(b.unlock.count) || b.unlock.count < 1 || b.unlock.count > b.unlock.conditions.length)) errors.push('필요한 조건 수는 등록된 조건 수 이하여야 합니다.');
   }
@@ -96,7 +97,7 @@ export function parseImport(text) {
   const parsed = JSON.parse(text);
   const errors = validateDraft(parsed);
   if (errors.length) throw Error(errors.join('\n'));
-  return duplicateRoom({ ...parsed, title: parsed.title.replace(/ \(복사\)$/, '') });
+  return duplicateRoom({ ...parsed, title: parsed.title.replace(/ \((?:복사|사본)\)$/, '') });
 }
 
 // Draft normalization is local/on-save only. Running session snapshots are not rewritten.
@@ -110,6 +111,7 @@ export function normalizeRoom(value) {
     const before=b.unlock.conditions.length;b.unlock.conditions=b.unlock.conditions.filter(c=>!removed.has(c.blockId));
     if(before!==b.unlock.conditions.length&&b.unlock.mode==='N'){b.unlock.count=Math.min(b.unlock.count,b.unlock.conditions.length);if(!b.unlock.conditions.length){b.unlock.mode='AND';b.unlock.count=1;}}
     if(b.display==='full')b.display='theme';
+    if(b.type==='story'&&b.immersiveOverlay===undefined)b.immersiveOverlay=true;
     if(b.type==='question'&&b.questionType==='qr')ensureBlockQr(r,b);
   }
   // Existing standalone missions become actual QR questions without replacing printed tokens.
@@ -161,8 +163,6 @@ export function validateForPlay(value) {
   if(!r.content.length)errors.push('실행할 콘텐츠를 하나 이상 추가하세요.');
   for(const b of r.content){
     const label=`${r.content.indexOf(b)+1}. ${b.title||'제목 없는 블록'}`;
-    if(b.display==='image'&&!safeUrl(b.backgroundUrl))errors.push(`${label}: 이미지 배경 URL을 입력하거나 수정하세요.`);
-    for(const m of b.media)if(!safeUrl(m.url))errors.push(`${label}: ${m.type} 자료 URL이 올바르지 않습니다.`);
     if(b.type==='question'){
       if(!['qr','switch','condition','approval'].includes(b.questionType)&&!b.answers.some(a=>a.trim()))errors.push(`${label}: 정답을 입력하세요.`);
       if(['choice','multi','order'].includes(b.questionType)&&b.answers.some(a=>!b.options.includes(a)))errors.push(`${label}: 정답과 선택지를 확인하세요.`);
@@ -177,3 +177,24 @@ export function validateForPlay(value) {
   }
   return [...new Set(errors)];
 }
+
+// Warning cleanup applies to a play copy, never the author's document.
+export function inspectForPlay(value) {
+  const errors=validateForPlay(value),warnings=[];
+  for(const [i,b] of (value?.content||[]).entries()){
+    const label=`${i+1}. ${b.title||'제목 없는 블록'}`;
+    if(['image','immersive'].includes(b.display)&&!safeAssetUrl(b.backgroundUrl))warnings.push(`${label}: 배경 이미지를 사용할 수 없습니다.`);
+    for(const m of b.media||[])if(m.url&&!safeAssetUrl(m.url))warnings.push(`${label}: ${{image:'이미지',video:'영상',audio:'음성'}[m.type]||'외부'} 자료를 사용할 수 없습니다.`);
+  }
+  return {errors,warnings};
+}
+export function safeAssetUrl(value){return /^https?:\/\/[^\s/?#]+([/?#][^\s]*)?$/i.test(String(value||''))&&safeUrl(value)?safeUrl(value):'';}
+export function preparePlayRoom(value,failedAssets=[]) {
+  const r=normalizeRoom(value);
+  for(const b of r.content){
+    b.media=b.media.filter(m=>safeAssetUrl(m.url)&&!failedAssets.includes(m.url));
+    if(['image','immersive'].includes(b.display)&&(!safeAssetUrl(b.backgroundUrl)||failedAssets.includes(b.backgroundUrl))){b.backgroundUrl='';if(b.display==='image')b.display='theme';}
+  }
+  return r;
+}
+export function displayTypesFor(type){return Object.fromEntries(Object.entries(DISPLAY_TYPES).filter(([key])=>key!=='immersive'||type==='story'));}

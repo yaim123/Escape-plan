@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {newRoom,newBlock,normalizeRoom,validateForPlay,ensureBlockQr,duplicateRoom,BLOCK_TYPES} from '../src/core/model.js';
+import {newRoom,newBlock,normalizeRoom,inspectForPlay,validateForPlay,ensureBlockQr,duplicateRoom,BLOCK_TYPES} from '../src/core/model.js';
 import {newQr,newQrMission} from '../src/core/qr.js';
 import {createTestSession,submitTestQr,blockCompleted} from '../src/core/session.js';
 import {LocalRepository} from '../src/data/storage.js';
@@ -12,7 +12,7 @@ const memory=()=>{const m=new Map();return {getItem:k=>m.get(k)||null,setItem:(k
 test('draft persists invalid URLs, incomplete answer/condition/QR; empty media removed; execution names blocks',async()=>{
  const r=newRoom(),b=newBlock();b.title='미완성 문제';b.media=[{type:'image',url:''},{type:'video',url:'bad URL'}];b.display='image';b.backgroundUrl='';b.unlock.conditions=[{blockId:'',event:'complete'}];r.content=[b];
  const repo=new LocalRepository(memory());await repo.save(r);const saved=(await repo.list())[0];assert.equal(saved.content[0].media.length,1);
- const errors=validateForPlay(saved).join('\n');assert.match(errors,/미완성 문제.*정답/);assert.match(errors,/미완성 문제.*배경/);assert.match(errors,/미완성 문제.*URL/);assert.match(errors,/공개 조건/);
+ const errors=validateForPlay(saved).join('\n');assert.match(errors,/미완성 문제.*정답/);const warnings=inspectForPlay(saved).warnings.join();assert.match(warnings,/미완성 문제.*배경/);assert.match(warnings,/미완성 문제.*자료/);assert.match(errors,/공개 조건/);
  b.questionType='qr';const m=ensureBlockQr(r,b);m.codes=[];await repo.save(r);assert.match(validateForPlay(r).join(),/QR/);
 });
 test('obsolete wait removal preserves other blocks and clears dependencies; full converts to theme',()=>{
