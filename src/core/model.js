@@ -1,3 +1,5 @@
+import {normalizeStages} from './stages.js';
+import {normalizePresentation,newDisplaySettings} from './presentation.js';
 import {qrToken,newQrMission} from './qr.js';
 export const VERSION = 1;
 export const BLOCK_TYPES = { story: '스토리', question: '문제', guide: '안내' };
@@ -10,10 +12,11 @@ export function newBlock(type = 'question') {
   return { id: uid(), type, title: type === 'question' ? '새로운 문제' : `새로운 ${BLOCK_TYPES[type]}`, body: '', stage: '1', questionType: 'short', answers: [], options: ['선택지 1', '선택지 2', '선택지 3'], hints: [], media: [], normalization: { trim: true, spaces: false, case: true, punctuation: false }, display: 'card', buttonText: '계속하기', points: 100, assignment: { mode: 'all', member: 1, role: '조장' }, completion: { mode: 'any', count: 1, member: 1, role: '조장' }, unlock: { mode: 'AND', count: 1, conditions: [] } };
 }
 export function newRoom(title = '이름 없는 방탈출') {
-  return { schemaVersion: VERSION, id: uid(), roomCode: roomCode(), title, description: '', subject: '자유 주제', playMode: 'individual', teamSettings: { teamCount: 4, maxMembers: null, rolesEnabled: false, roles: ['조장', '조원'] }, theme: { color: '#0c766d', background: '', bgm: '' }, rules: { hints: 'unlimited', hintLimit: 3, hintPenalty: 0, wrongPenalty: 0, ranking: 'none', rankVisibility: 'end', scoreEnabled: false, wrongPenaltyType: 'time', hintPenaltyType: 'time', finishMode: 'all', finalBlockId: null, timeLimit: 40 }, successMessage: '모든 단서를 연결했어요. 탈출에 성공했습니다!', content: [newBlock('story')], updatedAt: new Date().toISOString(), createdAt: new Date().toISOString() };
+  return { studentDisplaySettings:newDisplaySettings(), schemaVersion: VERSION, id: uid(), roomCode: roomCode(), title, description: '', subject: '자유 주제', playMode: 'individual', teamSettings: { teamCount: 4, maxMembers: null, rolesEnabled: false, roles: ['조장', '조원'] }, theme: { color: '#0c766d', background: '', bgm: '' }, rules: { hints: 'unlimited', hintLimit: 3, hintPenalty: 0, wrongPenalty: 0, ranking: 'none', rankVisibility: 'end', scoreEnabled: false, wrongPenaltyType: 'time', hintPenaltyType: 'time', finishMode: 'all', finalBlockId: null, timeLimit: 40 }, successMessage: '모든 단서를 연결했어요. 탈출에 성공했습니다!', content: [newBlock('story')], updatedAt: new Date().toISOString(), createdAt: new Date().toISOString() };
 }
 export function duplicateRoom(room) {
   const copy = normalizeRoom(room);
+  const stageIds=new Map(copy.stageGroups.map(g=>[g.id,uid()]));for(const g of copy.stageGroups)g.id=stageIds.get(g.id);for(const b of copy.content)b.stageId=stageIds.get(b.stageId);
   const ids = new Map(copy.content.map(b => [b.id, uid()]));
   for(const m of copy.qrMissions||[]){ids.set(m.id,uid());for(const q of m.codes)ids.set(q.id,uid());}
   copy.id = uid(); copy.roomCode = roomCode(); while(copy.roomCode===room.roomCode)copy.roomCode=roomCode(); copy.title += ' (사본)';
@@ -90,6 +93,10 @@ export function validateRoom(room) {
   if (!room.teamSettings || !Number.isInteger(room.teamSettings.teamCount) || room.teamSettings.teamCount < 1 || room.teamSettings.teamCount > 20 || !Array.isArray(room.teamSettings.roles)) errors.push('팀 설정이 올바르지 않습니다.');
   if (room.teamSettings && room.teamSettings.maxMembers !== null && (!Number.isInteger(room.teamSettings.maxMembers) || room.teamSettings.maxMembers < 1 || room.teamSettings.maxMembers > 20)) errors.push('팀당 인원은 1~20명 또는 제한 없음으로 설정하세요.');
   if (!room.theme || !/^#[0-9a-f]{6}$/i.test(room.theme.color)) errors.push('테마 색상이 올바르지 않습니다.');
+  if(room.design&&(!['auto','light','dark'].includes(room.design.text)||!['light','dark','glass'].includes(room.design.card)||!/^#[a-f0-9]{6}$/i.test(room.design.backgroundColor)))errors.push('화면 디자인 설정을 확인하세요.');
+  if(room.sound&&(!Number.isFinite(room.sound.volume)||room.sound.volume<0||room.sound.volume>1||typeof room.sound.allowMute!=='boolean'))errors.push('음악 설정을 확인하세요.');
+  if(room.studentDisplaySettings&&Object.values(room.studentDisplaySettings).some(v=>!['always','info','hidden'].includes(v)))errors.push('학생 표시 설정을 확인하세요.');
+  if(room.stageGroups&&(!Array.isArray(room.stageGroups)||new Set(room.stageGroups.map(g=>g.id)).size!==room.stageGroups.length))errors.push('스테이지 ID를 확인하세요.');
   return [...new Set(errors)];
 }
 export function parseImport(text) {
@@ -123,7 +130,7 @@ export function normalizeRoom(value) {
   }
   if(removed.has(r.rules?.finalBlockId)){r.rules.finalBlockId=null;r.rules.finishMode='all';}
   for(const m of r.qrMissions||[])if(removed.has(m.result?.targetId))m.result={type:'condition',targetId:null};
-  return r;
+  return normalizePresentation(normalizeStages(r));
 }
 export function ensureBlockQr(room,b) {
   room.qrMissions??=[];
@@ -186,11 +193,13 @@ export function inspectForPlay(value) {
     if(['image','immersive'].includes(b.display)&&!safeAssetUrl(b.backgroundUrl))warnings.push(`${label}: 배경 이미지를 사용할 수 없습니다.`);
     for(const m of b.media||[])if(m.url&&!safeAssetUrl(m.url))warnings.push(`${label}: ${{image:'이미지',video:'영상',audio:'음성'}[m.type]||'외부'} 자료를 사용할 수 없습니다.`);
   }
+  for(const [key,label] of [['background','기본 배경 이미지'],['bgm','배경음악']])if(value?.theme?.[key]&&!safeAssetUrl(value.theme[key]))warnings.push(`${label}를 사용할 수 없습니다.`);
   return {errors,warnings};
 }
 export function safeAssetUrl(value){return /^https?:\/\/[^\s/?#]+([/?#][^\s]*)?$/i.test(String(value||''))&&safeUrl(value)?safeUrl(value):'';}
 export function preparePlayRoom(value,failedAssets=[]) {
   const r=normalizeRoom(value);
+  for(const k of ['background','bgm'])if(!safeAssetUrl(r.theme[k])||failedAssets.includes(r.theme[k]))r.theme[k]='';
   for(const b of r.content){
     b.media=b.media.filter(m=>safeAssetUrl(m.url)&&!failedAssets.includes(m.url));
     if(['image','immersive'].includes(b.display)&&(!safeAssetUrl(b.backgroundUrl)||failedAssets.includes(b.backgroundUrl))){b.backgroundUrl='';if(b.display==='image')b.display='theme';}

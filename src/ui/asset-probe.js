@@ -9,6 +9,7 @@ export async function probePlayAssets(room,probe=probeAsset){
    const key=a.type+'|'+a.url;if(!assets.has(key))assets.set(key,{...a,labels:[]});assets.get(key).labels.push(`${i+1}. ${b.title}`);
   }
  }
+ for(const [key,type] of [['background','image'],['bgm','audio']])if(safeAssetUrl(room.theme?.[key]))assets.set(type+'|'+room.theme[key],{url:room.theme[key],type,labels:['방탈출 전체 설정']});
  const entries=[...assets.values()],failed=[];let cursor=0;
  await Promise.all(Array.from({length:Math.min(8,entries.length)},async()=>{while(cursor<entries.length){const a=entries[cursor++];if(!await probe(a))failed.push(a);}}));
  return {urls:[...new Set(failed.map(a=>a.url))],warnings:failed.flatMap(a=>a.labels.map(label=>`${label}: 외부 자료를 불러오지 못했습니다.`))};

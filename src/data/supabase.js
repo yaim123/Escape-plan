@@ -36,7 +36,7 @@ export class SupabaseRepository {
   async getUser() { this.requireUser(); return this.request('/auth/v1/user'); }
   async get(id) { this.requireUser(); return (await this.request(`/rest/v1/escape_contents?id=eq.${encodeURIComponent(id)}&select=*`))[0] || null; }
   requireUser() { if (!this.session?.user?.id) throw Error('교사 로그인이 필요합니다.'); return this.session.user.id; }
-  async list() { this.requireUser(); const rows = await this.request('/rest/v1/escape_contents?select=*&order=updated_at.desc'); return rows.map(r => normalizeRoom({ ...r.document, id: r.id, roomCode: r.room_code, updatedAt: r.updated_at })); }
+  async list() { this.requireUser(); const rows = await this.request('/rest/v1/escape_contents?select=*&order=created_at.asc,id.asc'); return rows.map(r => normalizeRoom({ ...r.document, id: r.id, roomCode: r.room_code, updatedAt: r.updated_at,createdAt:r.created_at })); }
   async classStates() { this.requireUser();return this.request('/rest/v1/rpc/escape_class_states',{method:'POST',body:{}}); }
   async importDraft(room) {
     const existing=await this.get(room.id);if(existing)return existing;

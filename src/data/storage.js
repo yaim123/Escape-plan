@@ -1,3 +1,4 @@
+import {createdOrder} from '../core/presentation.js';
 import { validateDraft, normalizeRoom } from '../core/model.js';
 const KEY = 'escape-studio:rooms:v1';
 export class LocalRepository {
@@ -8,7 +9,7 @@ export class LocalRepository {
     let rooms;
     try { rooms = JSON.parse(raw); } catch { throw Error('저장 데이터를 읽을 수 없습니다. 브라우저 데이터를 지우지 말고 JSON 백업을 확인하세요.'); }
     if (!Array.isArray(rooms)) throw Error('저장 데이터 형식이 올바르지 않습니다.');
-    return rooms.map(normalizeRoom).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return rooms.map(normalizeRoom).sort(createdOrder);
   }
   async save(room) {
     const errors = validateDraft(room); if (errors.length) throw Error(errors[0]);
