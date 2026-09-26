@@ -1,3 +1,4 @@
+import {classification} from './classification.js';
 import {normalizeStages} from './stages.js';
 import {normalizePresentation,newDisplaySettings} from './presentation.js';
 import {qrToken,newQrMission} from './qr.js';
@@ -12,7 +13,7 @@ export function newBlock(type = 'question') {
   return { id: uid(), type, title: type === 'question' ? '새로운 문제' : `새로운 ${BLOCK_TYPES[type]}`, body: '', stage: '1', questionType: 'short', answers: [], options: ['선택지 1', '선택지 2', '선택지 3'], hints: [], media: [], normalization: { trim: true, spaces: false, case: true, punctuation: false }, display: 'card', buttonText: '계속하기', points: 100, assignment: { mode: 'all', member: 1, role: '조장' }, completion: { mode: 'any', count: 1, member: 1, role: '조장' }, unlock: { mode: 'AND', count: 1, conditions: [] } };
 }
 export function newRoom(title = '이름 없는 방탈출') {
-  return { studentDisplaySettings:newDisplaySettings(), schemaVersion: VERSION, id: uid(), roomCode: roomCode(), title, description: '', subject: '자유 주제', playMode: 'individual', teamSettings: { teamCount: 4, maxMembers: null, rolesEnabled: false, roles: ['조장', '조원'] }, theme: { color: '#0c766d', background: '', bgm: '' }, rules: { hints: 'unlimited', hintLimit: 3, hintPenalty: 0, wrongPenalty: 0, ranking: 'none', rankVisibility: 'end', scoreEnabled: false, wrongPenaltyType: 'time', hintPenaltyType: 'time', finishMode: 'all', finalBlockId: null, timeLimit: 40 }, successMessage: '모든 단서를 연결했어요. 탈출에 성공했습니다!', content: [newBlock('story')], updatedAt: new Date().toISOString(), createdAt: new Date().toISOString() };
+  return { studentDisplaySettings:newDisplaySettings(), schemaVersion: VERSION, id: uid(), roomCode: roomCode(), title, description: '', subject: '자유 주제', playMode: 'individual', teamSettings: { teamCount: 4, maxMembers: null, rolesEnabled: false, roles: ['조장', '조원'] }, theme: { color: '#0c766d', background: '', bgm: '' }, rules: { delayMinutes:3, hints: 'unlimited', hintLimit: 3, hintPenalty: 0, wrongPenalty: 0, ranking: 'none', rankVisibility: 'end', scoreEnabled: false, wrongPenaltyType: 'time', hintPenaltyType: 'time', finishMode: 'all', finalBlockId: null, timeLimit: 40 }, successMessage: '모든 단서를 연결했어요. 탈출에 성공했습니다!', content: [newBlock('story')], updatedAt: new Date().toISOString(), createdAt: new Date().toISOString() };
 }
 export function duplicateRoom(room) {
   const copy = normalizeRoom(room);
@@ -96,6 +97,7 @@ export function validateRoom(room) {
   if(room.design&&(!['auto','light','dark'].includes(room.design.text)||!['light','dark','glass'].includes(room.design.card)||!/^#[a-f0-9]{6}$/i.test(room.design.backgroundColor)))errors.push('화면 디자인 설정을 확인하세요.');
   if(room.sound&&(!Number.isFinite(room.sound.volume)||room.sound.volume<0||room.sound.volume>1||typeof room.sound.allowMute!=='boolean'))errors.push('음악 설정을 확인하세요.');
   if(room.studentDisplaySettings&&Object.values(room.studentDisplaySettings).some(v=>!['always','info','hidden'].includes(v)))errors.push('학생 표시 설정을 확인하세요.');
+  if(room.rules?.delayMinutes!==undefined&&(!Number.isInteger(room.rules.delayMinutes)||room.rules.delayMinutes<0||room.rules.delayMinutes>10))errors.push('진행 지연 기준은 0(OFF) 또는 1~10분입니다.');
   if(room.stageGroups&&(!Array.isArray(room.stageGroups)||new Set(room.stageGroups.map(g=>g.id)).size!==room.stageGroups.length))errors.push('스테이지 ID를 확인하세요.');
   return [...new Set(errors)];
 }
@@ -130,6 +132,7 @@ export function normalizeRoom(value) {
   }
   if(removed.has(r.rules?.finalBlockId)){r.rules.finalBlockId=null;r.rules.finishMode='all';}
   for(const m of r.qrMissions||[])if(removed.has(m.result?.targetId))m.result={type:'condition',targetId:null};
+  r.metadata=classification(r);r.rules.delayMinutes??=3;
   return normalizePresentation(normalizeStages(r));
 }
 export function ensureBlockQr(room,b) {

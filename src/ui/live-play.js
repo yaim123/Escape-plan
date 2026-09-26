@@ -1,3 +1,4 @@
+import {questionAnalysisHtml,delayWarningsHtml} from './analysis.js';
 import {renderStudentInfo,mountBgm} from './student-info.js';
 import {isImmersive,immersiveHtml,mountImmersive} from './immersive.js';
 import {mountAssetFallback} from './asset-fallback.js';
@@ -32,7 +33,7 @@ const wrongTotal=p=>Object.values(p?.wrongCounts||{}).reduce((a,b)=>a+Number(b),
 export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,onReset,contentId}) {
   let scanController,bgm;
   const client=new LivePlayClient(lobby); let game=null, disposed=false, loading=false, queued=false, writing=false, signature='', feedback='', stopWatch, timer, debounce, clockTimer, receivedAt=Date.now(), panelTarget=null, panelRevision=null;
-  root.innerHTML=`${teacher?`<div class="actions"><a class="btn class-back" href="#/editor/${esc(contentId)}">← 방탈출 편집</a></div>`:''}<div class="page-heading"><div><span class="eyebrow">${teacher?'LIVE PROGRESS':'LIVE PLAY'}</span><h1>${esc(initial.title)}</h1><p>${teacher?'학생과 팀의 진행 상태를 실시간으로 확인합니다.':'단서를 살펴보고 다음 콘텐츠를 열어보세요.'}</p></div><span id="game-connection" role="status">실시간 연결 중…</span></div><div id="game-error" role="alert"></div><p id="game-feedback" role="status"></p><p id="game-clock" role="timer"></p><div id="arrival-summary"></div><div id="game-progress"></div><div id="live-content"><p>진행 상태를 불러오는 중…</p></div>${teacher?'<div id="control-panel"></div><div id="control-audit"></div><div class="actions"><button class="btn primary" id="pause-session">전체 일시정지</button><button class="btn" id="finish-session">수업 종료</button><button class="btn" id="reset-session">수업 완료 및 초기화</button></div>':''}`;
+  root.innerHTML=`${teacher?`<div class="actions"><a class="btn class-back" href="#/editor/${esc(contentId)}">← 방탈출 편집</a></div>`:''}<div class="page-heading"><div><span class="eyebrow">${teacher?'LIVE PROGRESS':'LIVE PLAY'}</span><h1>${esc(initial.title)}</h1><p>${teacher?'학생과 팀의 진행 상태를 실시간으로 확인합니다.':'단서를 살펴보고 다음 콘텐츠를 열어보세요.'}</p></div><span id="game-connection" role="status">실시간 연결 중…</span></div><div id="game-error" role="alert"></div><p id="game-feedback" role="status"></p><p id="game-clock" role="timer"></p><div id="arrival-summary"></div>${teacher?'<div id="question-analysis"></div><div id="delay-warnings"></div>':''}<div id="game-progress"></div><div id="live-content"><p>진행 상태를 불러오는 중…</p></div>${teacher?'<div id="control-panel"></div><div id="control-audit"></div><div class="actions"><button class="btn primary" id="pause-session">전체 일시정지</button><button class="btn" id="finish-session">수업 종료</button><button class="btn" id="reset-session">수업 완료 및 초기화</button></div>':''}`;
   if(!teacher){root.classList.add('student-presented');root.insertAdjacentHTML('afterbegin','<div id="student-meta"></div>');}
   const showError=error=>{if(!disposed) root.querySelector('#game-error').textContent=error.message||error;};
   root.querySelector('#game-clock').insertAdjacentHTML('afterend','<div id="qr-progress"></div>');
@@ -69,7 +70,9 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
       }catch(error){showError(error);}finally{writing=false;if(btn)btn.disabled=false;if(queued){queued=false;schedule();}}
     });
   };
+  const drawDelays=()=>{if(teacher&&game)root.querySelector('#delay-warnings').innerHTML=delayWarningsHtml(game.delayState,game.status,game.status==='playing'?Date.now()-receivedAt:0);};
   const drawTeacher=()=>{
+    root.querySelector('#question-analysis').innerHTML=(game.status==='finished'||game.summary?.allComplete)?questionAnalysisHtml(game.questionAnalysis):'';drawDelays();
     const rows=game.participants;
     const summary=game.summary;
     const statusLabel=p=>{const result=summary?.results.find(r=>r.memberIds.includes(p.id));if(result)return `탈출 완료 (${elapsedLabel(result.elapsedMs)})`;if(game.status==='finished')return '미완료 종료';if(game.status==='paused')return '일시정지 · 미완료';return `${Date.parse(game.timing?.serverNow)-Date.parse(p.lastSeenAt)>75000?'연결 끊김':'진행 중'} · 미완료`;};
@@ -111,7 +114,7 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
   stopWatch=watchLobby(lobby.repo.config,initial.topic,schedule,status=>{if(!disposed)root.querySelector('#game-connection').textContent={connected:'실시간 연결됨',connecting:'실시간 연결 중…',reconnecting:'실시간 재연결 중…',error:'실시간 연결 확인 필요'}[status];});
   timer=setInterval(async()=>{if(!teacher){try{await lobby.student(code,'touch');}catch(error){showError(error);}}load();},25000);
   document.addEventListener('visibilitychange',visible);window.addEventListener('online',schedule);
-  clockTimer=setInterval(drawClock,1000);
+  clockTimer=setInterval(()=>{drawClock();drawDelays();},1000);
   root.onclick=async event=>{
     const scanButton=event.target.closest('[data-question-qr]');
     if(scanButton){if(writing||scanController)return;const blockId=scanButton.dataset.questionQr;scanController=new AbortController();

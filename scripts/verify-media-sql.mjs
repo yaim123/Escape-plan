@@ -16,6 +16,7 @@ await db.query('insert into auth.users values($1),($2)',[A,B]);
 for(const file of ['001_foundation','002_live_lobby','003_live_play','004_teacher_controls','005_teacher_team_event_fix','006_results_and_reset','007_qr_interaction','008_qr_question_type','009_editor_flow_and_block_qr']) await db.exec(await readFile(`supabase/${file}.sql`,'utf8'));
 await db.exec(await readFile('supabase/010_lobby_assets_and_immersive.sql','utf8'));
 {await (await import('./storage-fixture.mjs')).storageFixture(db);await db.exec(await readFile('supabase/011_stages_display_and_media.sql','utf8'));}
+if(process.argv.includes('--tools'))await db.exec(await readFile('supabase/012_analysis_print_and_block_library.sql','utf8'));
 const as=async(role,uid='')=>{await db.exec(`reset role; set role ${role};`);await db.query("select set_config('request.jwt.claim.sub',$1,false)",[uid]);};
 const call=async(sql,args=[])=>(await db.query(sql,args)).rows[0].result;
 const teacher=(action,id)=>call('select public.escape_teacher_lobby($1,$2) result',[action,id]);

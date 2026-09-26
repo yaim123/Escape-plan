@@ -1,0 +1,9 @@
+import {hardestQuestions,delayedSubjects} from '../core/analysis.js';
+import {esc} from './dom.js';
+import {elapsedLabel} from './teacher-controls.js';
+export function questionAnalysisHtml(analysis){
+ if(!analysis)return '<p class="muted">이전 보관 기록에는 문제별 분석 데이터가 없습니다.</p>';
+ const unit=analysis.unit==='team'?'팀':'학생',top=hardestQuestions(analysis);
+ return `<details class="panel question-analysis" open><summary>문제별 수업 분석</summary><h3>가장 많이 막힌 문제 TOP 3</h3><p class="muted">오답 + 힌트 합계가 많은 순, 동률이면 기록된 평균 해결 시간이 긴 순입니다. 스토리·안내는 제외합니다.</p>${top.length?`<ol>${top.map(q=>`<li>${esc(q.title)} · 오답 ${q.wrongTotal}회 / 힌트 ${q.hintTotal}회${q.averageSolveMs==null?'':` · 평균 ${elapsedLabel(q.averageSolveMs)}`}</li>`).join('')}</ol>`:'<p>아직 비교할 풀이 기록이 없습니다.</p>'}<div class="progress-table-wrap"><table class="progress-table"><thead><tr><th>문제</th><th>완료 ${unit}</th><th>${unit}당 평균 오답</th><th>전체 오답</th><th>힌트</th><th>평균 해결 시간</th></tr></thead><tbody>${(analysis.questions||[]).map(q=>`<tr><td>${esc(q.title)}</td><td>${q.completed} / ${q.total}</td><td>${q.wrongAverage??'—'}</td><td>${q.wrongTotal}</td><td>${q.hintTotal}</td><td>${q.averageSolveMs==null?'— (시간 기록 없음)':`${elapsedLabel(q.averageSolveMs)} (${q.timedCount}${unit})`}</td></tr>`).join('')}</tbody></table></div><p class="muted">평균 오답은 현재 참가 ${unit} 전체 기준입니다. 해결 시간은 해당 문제를 현재 화면으로 배정받은 구간의 합이며, 일시정지와 다른 콘텐츠 구간은 제외합니다. 정확한 진입 기록이 없는 이전 수업·교사 강제 완료·진행 초기화/팀 이동으로 무효화된 시간은 평균에서 제외합니다.</p></details>`;
+}
+export function delayWarningsHtml(state,status,extraMs=0){const rows=delayedSubjects(state,status,extraMs);return rows.length?`<section class="delay-panel" aria-label="진행 지연"><h3>진행 지연</h3>${rows.map(r=>`<p class="delay-warning ${r.strong?'delay-strong':''}">⚠ ${esc(r.label)} · ${esc(r.title)} · ${elapsedLabel(r.idleMs)}째 의미 있는 활동 없음</p>`).join('')}</section>`:'';}
