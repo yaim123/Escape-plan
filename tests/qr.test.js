@@ -7,8 +7,8 @@ import {newQrMission,newQr,qrUrl,readQr,scanTestQr,qrTestState} from '../src/cor
 import {createTestSession,blockAvailable} from '../src/core/session.js';
 test('QR conditions simulate unique claims and per-member completion without live writes',()=>{
  const room=newRoom();room.playMode='team';const m=newQrMission();m.codes=[newQr(),newQr(),newQr(),newQr()];m.mode='UNIQUE_MEMBER';room.qrMissions=[m];const b=newBlock();b.unlock.conditions=[{blockId:m.id,event:'qr_complete'}];room.content=[b];const s=createTestSession(room,0,2);
- scanTestQr(room,s,1,m.codes[0].id);assert.equal(scanTestQr(room,s,2,m.codes[0].id),false);scanTestQr(room,s,1,m.codes[1].id);assert.equal(blockAvailable(room,s,b,2),false);scanTestQr(room,s,2,m.codes[2].id);assert.equal(blockAvailable(room,s,b,2),true);
- for(const [mode,count,done] of [['ANY',1,true],['ALL',1,false],['N_OF_M',3,true]]){m.mode=mode;m.count=count;assert.equal(qrTestState(room,s,2)[0].done,done);}
+ scanTestQr(room,s,1,m.codes[0].id);assert.throws(()=>scanTestQr(room,s,2,m.codes[0].id),/다른 팀원/);assert.throws(()=>scanTestQr(room,s,1,m.codes[1].id),/이미 QR/);assert.equal(blockAvailable(room,s,b,2),false);scanTestQr(room,s,2,m.codes[2].id);assert.equal(blockAvailable(room,s,b,2),true);
+ for(const [mode,count,done] of [['ANY',1,true],['ALL',1,false],['N_OF_M',2,true]]){m.mode=mode;m.count=count;assert.equal(qrTestState(room,s,2)[0].done,done);}
  m.scope='student';assert.equal(qrTestState(room,s,2)[0].found,1);
 });
 test('duplicate/import regenerates QR capabilities and maps all condition references',()=>{

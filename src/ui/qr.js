@@ -4,12 +4,12 @@ import {newQrMission,newQr,qrUrl,readQr} from '../core/qr.js';
 import {LobbyClient} from '../data/lobby.js';
 const loads=new Map();
 export function qrLibrary(name){if(!loads.has(name))loads.set(name,new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL(`../vendor/${name}.js`,import.meta.url).href;script.onload=resolve;script.onerror=()=>{loads.delete(name);reject(Error('QR 도구를 불러오지 못했습니다.'));};document.head.append(script);}));return loads.get(name);}
-export function qrProgressHtml(rows=[]){return rows.length?`<section class="panel qr-progress"><h3>QR 단서</h3>${rows.map(m=>`<p>${esc(m.name)} <strong>${m.found} / ${m.total}</strong> ${m.done?'✅ 완료':''}</p>`).join('')}</section>`:'';}
+export function qrProgressHtml(rows=[]){return rows.length?`<section class="panel qr-progress"><h3>QR 단서</h3>${rows.map(m=>`<p>${esc(m.name)} <strong>${m.found} / ${m.mode==='UNIQUE_MEMBER'?m.required:m.total}${m.mode==='UNIQUE_MEMBER'?'명':''}</strong> ${m.done?'✅ 완료':''}${m.insufficient?' · 팀원 수 이상의 활성 QR이 필요합니다.':''}</p>`).join('')}</section>`:'';}
 // Server state commits immediately; only presentation waits for acknowledgement.
-export function scanQrDialog(signal,onScan){return new Promise(resolve=>{
+export function scanQrDialog(signal,onScan,{onChat}={}){return new Promise(resolve=>{
  let stream,timer,closed=false,busy=false,lastToken=null,accepted=null,starting=false;
  const stop=()=>{clearTimeout(timer);stream?.getTracks().forEach(t=>t.stop());};
- const d=modal(`<div class="modal-body qr-scanner"><div class="qr-scan-inputs"><h2>QR 스캔</h2><p>카메라로 QR을 비추거나 QR 이미지·링크를 읽으세요.</p><video id="qr-video" playsinline muted></video><button type="button" class="btn primary" id="qr-camera">카메라 켜기</button>${field('QR 이미지 선택','<input id="qr-image" type="file" accept="image/*">')}<form id="qr-link-form">${field('QR 링크 입력','<input name="link" type="text" required autocomplete="off">')}<button class="btn" type="submit">QR 링크 확인</button></form><p id="qr-error" role="status"></p></div><div class="scanner-error" hidden role="alertdialog" aria-modal="true" aria-labelledby="scan-error-title" aria-describedby="scan-error-detail"><div><h2 id="scan-error-title"></h2><p id="scan-error-detail"></p><button class="btn primary" type="button" id="qr-retry">확인</button></div></div></div>`);
+ const d=modal(`<div class="modal-body qr-scanner"><div class="qr-scan-inputs"><h2>QR 스캔</h2>${onChat?'<button class="btn" type="button" id="qr-open-chat">팀 채팅 열기</button>':''}<p>카메라로 QR을 비추거나 QR 이미지·링크를 읽으세요.</p><video id="qr-video" playsinline muted></video><button type="button" class="btn primary" id="qr-camera">카메라 켜기</button>${field('QR 이미지 선택','<input id="qr-image" type="file" accept="image/*">')}<form id="qr-link-form">${field('QR 링크 입력','<input name="link" type="text" required autocomplete="off">')}<button class="btn" type="submit">QR 링크 확인</button></form><p id="qr-error" role="status"></p></div><div class="scanner-error" hidden role="alertdialog" aria-modal="true" aria-labelledby="scan-error-title" aria-describedby="scan-error-detail"><div><h2 id="scan-error-title"></h2><p id="scan-error-detail"></p><button class="btn primary" type="button" id="qr-retry">확인</button></div></div></div>`);
  const inputs=d.querySelector('.qr-scan-inputs'),overlay=d.querySelector('.scanner-error'),ack=d.querySelector('#qr-retry'),close=d.querySelector('.modal-close');
  const setBusy=value=>{busy=value;inputs.inert=value;close.disabled=value;};
  const error=e=>{if(!closed)d.querySelector('#qr-error').textContent=e.message||e;};
@@ -19,6 +19,7 @@ export function scanQrDialog(signal,onScan){return new Promise(resolve=>{
   if(result&&!result.keepOpen){resolve(result);d.close();}else {inputs.querySelector('[name=link]').focus();}
   result?.onConfirm?.();
  };
+ d.querySelector('#qr-open-chat')?.addEventListener('click',()=>{d.close();setTimeout(onChat,0);});
  const cancel=e=>{if(busy)e.preventDefault();};d.addEventListener('cancel',cancel);
  const focusResult=e=>{if(!overlay.hidden&&e.key==='Tab'){e.preventDefault();ack.focus();}};d.addEventListener('keydown',focusResult);
  const finish=async(value,fromCamera=false)=>{

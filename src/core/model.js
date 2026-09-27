@@ -1,3 +1,4 @@
+import {validateChat} from './chat.js';
 import {classification} from './classification.js';
 import {normalizeStages} from './stages.js';
 import {normalizePresentation,newDisplaySettings} from './presentation.js';
@@ -19,6 +20,7 @@ export function duplicateRoom(room) {
   const copy = normalizeRoom(room);
   const stageIds=new Map(copy.stageGroups.map(g=>[g.id,uid()]));for(const g of copy.stageGroups)g.id=stageIds.get(g.id);for(const b of copy.content)b.stageId=stageIds.get(b.stageId);
   const ids = new Map(copy.content.map(b => [b.id, uid()]));
+  const chats=new Map((copy.chatRooms||[]).map(c=>[c.id,uid()]));for(const c of copy.chatRooms||[])c.id=chats.get(c.id);for(const b of copy.content)b.chatRoomIds=(b.chatRoomIds||[]).map(id=>chats.get(id)).filter(Boolean);
   for(const m of copy.qrMissions||[]){ids.set(m.id,uid());for(const q of m.codes)ids.set(q.id,uid());}
   copy.id = uid(); copy.roomCode = roomCode(); while(copy.roomCode===room.roomCode)copy.roomCode=roomCode(); copy.title += ' (사본)';
   copy.createdAt = copy.updatedAt = new Date().toISOString();
@@ -40,7 +42,8 @@ export function validateRoom(room) {
   if (!['individual', 'team'].includes(room.playMode)) errors.push('플레이 방식이 올바르지 않습니다.');
   if (!Array.isArray(room.content) || room.content.length > 200) return [...errors, '콘텐츠는 최대 200개까지 지원합니다.'];
   for (const k of ['description', 'subject', 'successMessage']) if (typeof room[k] !== 'string') errors.push('방탈출 설명 형식이 올바르지 않습니다.');
-  const ids = new Set(room.content.map(b => b?.id));
+  errors.push(...validateChat(room));
+    const ids = new Set(room.content.map(b => b?.id));
   if (ids.size !== room.content.length) errors.push('중복된 블록 ID가 있습니다.');
   const qrKinds=new Map(),tokens=new Set();
   if(room.qrMissions!==undefined&&!Array.isArray(room.qrMissions))return [...errors,'QR 미션 형식이 올바르지 않습니다.'];

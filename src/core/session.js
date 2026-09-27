@@ -2,7 +2,7 @@ import { isUnlocked, assignedMembers, isComplete } from './conditions.js';
 import { checkAnswer } from './answers.js';
 import {qrTestEvents,qrTestState,scanTestQr} from './qr.js';
 export function createTestSession(room, now = Date.now(), memberCount = 4) {
-  const members = Array.from({ length: room.playMode === 'team' ? memberCount : 1 }, (_, i) => ({ member: i + 1, role: room.teamSettings.rolesEnabled ? (room.teamSettings.roles[i === 0 ? 0 : Math.min(1, room.teamSettings.roles.length - 1)] || '조원') : '조원' }));
+  const members = Array.from({ length: room.playMode === 'team' ? memberCount : 1 }, (_, i) => ({ member: i + 1, role: room.teamSettings.rolesEnabled ? (room.teamSettings.roles[Math.min(i, room.teamSettings.roles.length - 1)] || '조원') : '조원' }));
   return { roomId: room.id, contentRevision: room.updatedAt, startedAt: now, finishedAt: null, members, events: [], wrong: {}, hints: {}, penalties: 0 };
 }
 function scopedEvents(room,session,member) {

@@ -9,4 +9,4 @@ export function normalizePresentation(room){
  if(room.studentDisplaySettings)room.studentDisplaySettings={...newDisplaySettings(),...room.studentDisplaySettings};
  return room;
 }
-export const createdOrder=(a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||''))||String(a.id).localeCompare(String(b.id));
+export const createdOrder=(a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))||String(a.id).localeCompare(String(b.id));

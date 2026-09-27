@@ -17,7 +17,7 @@ test('stage reorder and cross-stage moves renumber blocks without breaking QR or
  const copy=duplicateRoom(r);assert.notEqual(copy.stageGroups[0].id,r.stageGroups[0].id);assert.equal(copy.content[0].stageId,copy.stageGroups[0].id);
 });
 test('creation order does not depend on edits and local repository preserves it',async()=>{
- const map=new Map(),repo=new LocalRepository({getItem:k=>map.get(k)||null,setItem:(k,v)=>map.set(k,v)});const a=newRoom('A'),b=newRoom('B');a.createdAt='2026-01-01';b.createdAt='2026-01-02';await repo.save(b);await repo.save(a);a.description='편집';await repo.save(a);assert.deepEqual((await repo.list()).map(r=>r.title),['A','B']);assert.deepEqual([b,a].sort(createdOrder).map(r=>r.title),['A','B']);
+ const map=new Map(),repo=new LocalRepository({getItem:k=>map.get(k)||null,setItem:(k,v)=>map.set(k,v)});const a=newRoom('A'),b=newRoom('B');a.createdAt='2026-01-01';b.createdAt='2026-01-02';await repo.save(b);await repo.save(a);a.description='편집';await repo.save(a);assert.deepEqual((await repo.list()).map(r=>r.title),['B','A']);assert.deepEqual([b,a].sort(createdOrder).map(r=>r.title),['B','A']);
 });
 test('display policies separate always/info/hidden; immersive moves always into info without exposing hidden',()=>{
  const settings=Object.fromEntries(Object.keys(DISPLAY_FIELDS).map(k=>[k,'hidden']));settings.title='always';settings.elapsed='info';const c={title:'VISIBLE',description:'SECRET',studentDisplaySettings:settings,progress:{completedCount:1,totalCount:2},elapsedMs:12000};

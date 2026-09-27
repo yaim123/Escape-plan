@@ -18,6 +18,7 @@ if(process.argv.includes('--ux'))await db.exec(await readFile('supabase/010_lobb
 if(process.argv.includes('--media')){await (await import('./storage-fixture.mjs')).storageFixture(db);await db.exec(await readFile('supabase/011_stages_display_and_media.sql','utf8'));}
 if(process.argv.includes('--tools'))await db.exec(await readFile('supabase/012_analysis_print_and_block_library.sql','utf8'));
 if(process.argv.includes('--qr-ux'))await db.exec(await readFile('supabase/013_qr_scan_receipt.sql','utf8'));
+if(process.argv.includes('--team-chat'))await db.exec(await readFile('supabase/014_team_chat_and_rewind.sql','utf8'));
 const as=async(role,uid='')=>{await db.exec(`reset role; set role ${role};`);await db.query("select set_config('request.jwt.claim.sub',$1,false)",[uid]);};
 const call=async(sql,args=[])=>(await db.query(sql,args)).rows[0].result;
 const teacher=(action,id)=>call('select public.escape_teacher_lobby($1,$2) result',[action,id]);
@@ -49,8 +50,9 @@ for(const mode of ['individual','team'])for(const scope of ['student','team'])fo
  await assert.rejects(answerQr(tokens[0],q,newQr()),/이 문제의 QR/);assert.equal((await play(tokens[0])).qr[0].found,0);
  await as('authenticated',A);await control(sid,'pause');await as('anon');await assert.rejects(scan(tokens[0],m.codes[0]),/진행 중/);await as('authenticated',A);await control(sid,'resume');await as('anon');
  const first=await answerQr(tokens[0],q,m.codes[0]);
- if(process.argv.includes('--qr-ux'))assert.deepEqual(first.qrScan,{mode:condition,found:1,required:condition==='ALL'?3:condition==='ANY'?1:2,done:condition==='ANY'});
- if(condition!=='ANY'){
+ if(process.argv.includes('--qr-ux'))assert.deepEqual(first.qrScan,{mode:condition,found:1,required:condition==='ALL'?3:condition==='ANY'?1:2,done:condition==='ANY',...(process.argv.includes('--team-chat')&&condition==='UNIQUE_MEMBER'?{selfDone:true}:{})});
+ if(condition==='UNIQUE_MEMBER'&&process.argv.includes('--team-chat')){await assert.rejects(scan(tokens[0],m.codes[1]),/이미 QR/);await scan(tokens[1],m.codes[1]);}
+ else if(condition!=='ANY'){
   assert.equal((await scan(tokens[0],m.codes[0])).duplicate,true);assert.equal((await play(tokens[0])).qr[0].found,1);
   const second=await scan(tokens[0],m.codes[1]);if(process.argv.includes('--qr-ux')){assert.equal(second.qrScan.found,condition==='UNIQUE_MEMBER'?1:2);assert.equal(second.qrScan.required,condition==='ALL'?3:2);}
   if(condition==='ALL')await scan(tokens[0],m.codes[2]);
