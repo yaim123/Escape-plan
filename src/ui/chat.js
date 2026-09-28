@@ -8,7 +8,7 @@ export function mountChat(root,lobby,token){
  button.className='btn chat-launch';button.type='button';button.hidden=true;button.setAttribute('aria-label','팀 채팅');
  dialog.className='chat-drawer';dialog.setAttribute('aria-label','팀 채팅');root.append(button);document.body.append(dialog);
  const rpc=(action,extra={})=>lobby.rpc('escape_chat',{p_token:token(),p_action:action,...extra});
- const enabled=()=>game?.status==='playing'&&game.playMode==='team'&&!game.result&&game.current?.chatEnabled;
+ const enabled=()=>game?.status==='playing'&&game.playMode==='team'&&game.teamChatEnabled!==false&&!game.result&&game.current?.chatEnabled;
  const key=id=>`escape-studio:chat-seen:${identity}:${id}`;
  const readSeen=id=>{if(!seen.has(id)){try{seen.set(id,Number(localStorage.getItem(key(id)))||0);}catch{seen.set(id,0);}}return seen.get(id);};
  const mark=()=>{const r=rooms.find(r=>r.id===selected);if(r){seen.set(r.id,r.count);try{localStorage.setItem(key(r.id),String(r.count));}catch{/* Unread falls back to this page's memory. */}}badge();};

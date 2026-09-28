@@ -42,7 +42,7 @@ function fixture(mode,scope,condition){const r=newRoom('검증 '+mode+scope+cond
 {
  const {r,q,m,next}=fixture('team','team','UNIQUE_MEMBER');r.content=[q,next];m.codes=Array.from({length:6},newQr);const sid=(await save(r)).sessionId;
  await as('anon');for(let i=0;i<4;i++){await join(r,tokens[i],i+1);await lobby(tokens[i],1);}await as('authenticated',A);await teacher('start',sid);await as('anon');await scan(tokens[0],m.codes[0]);await scan(tokens[0],m.codes[1]);await scan(tokens[1],m.codes[2]);
- await as('postgres');await db.exec(await readFile('supabase/014_team_chat_and_rewind.sql','utf8'));assert.equal((await db.query('select count(*) n from public.escape_qr_scans where session_id=$1 and retired_at is not null',[sid])).rows[0].n,1);
+ await as('postgres');await db.exec(await readFile('supabase/014_team_chat_and_rewind.sql','utf8'));if(process.argv.includes('--roles'))await db.exec(await readFile('supabase/015_team_roles_and_visibility.sql','utf8'));assert.equal((await db.query('select count(*) n from public.escape_qr_scans where session_id=$1 and retired_at is not null',[sid])).rows[0].n,1);
  await as('anon');await scan(tokens[2],m.codes[1]);await scan(tokens[3],m.codes[3]);assert.equal((await play(tokens[0])).current.id,next.id);
  await as('authenticated',A);await db.query('delete from public.escape_contents where id=$1',[r.id]);
 }

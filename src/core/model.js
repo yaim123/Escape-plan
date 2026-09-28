@@ -1,3 +1,4 @@
+import {validateTeamSettings,waitingSettings} from './team-settings.js';
 import {validateChat} from './chat.js';
 import {classification} from './classification.js';
 import {normalizeStages} from './stages.js';
@@ -42,7 +43,7 @@ export function validateRoom(room) {
   if (!['individual', 'team'].includes(room.playMode)) errors.push('플레이 방식이 올바르지 않습니다.');
   if (!Array.isArray(room.content) || room.content.length > 200) return [...errors, '콘텐츠는 최대 200개까지 지원합니다.'];
   for (const k of ['description', 'subject', 'successMessage']) if (typeof room[k] !== 'string') errors.push('방탈출 설명 형식이 올바르지 않습니다.');
-  errors.push(...validateChat(room));
+  errors.push(...validateChat(room),...validateTeamSettings(room));
     const ids = new Set(room.content.map(b => b?.id));
   if (ids.size !== room.content.length) errors.push('중복된 블록 ID가 있습니다.');
   const qrKinds=new Map(),tokens=new Set();
@@ -135,6 +136,7 @@ export function normalizeRoom(value) {
   }
   if(removed.has(r.rules?.finalBlockId)){r.rules.finalBlockId=null;r.rules.finishMode='all';}
   for(const m of r.qrMissions||[])if(removed.has(m.result?.targetId))m.result={type:'condition',targetId:null};
+  r.teamSettings.waiting=waitingSettings(r);
   r.metadata=classification(r);r.rules.delayMinutes??=3;
   return normalizePresentation(normalizeStages(r));
 }
