@@ -108,3 +108,5 @@ docs/          구현 현황과 후속 개발 설계
 ```
 
 남은 작업과 설계 제한은 `docs/IMPLEMENTATION.md`에 정리했습니다.
+
+병렬 진행·정보창 스크롤·완료 후 나가기·설정 재배치·교사 진행률과 새 016 SQL 적용 안내는 [docs/PARALLEL_FLOW_016.md](docs/PARALLEL_FLOW_016.md)를 참고하세요.

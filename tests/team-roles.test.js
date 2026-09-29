@@ -13,8 +13,8 @@ test('role rows round-trip expanded slots and reject duplicate names/invalid cou
 });
 test('global switches hide controls without deleting subordinate data',()=>{
  const r=normalizeRoom(fixture());r.content[0].assignment.visibleRoles=['A'];r.content[0].chatEnabled=true;r.content[0].chatRoomIds=['old'];const before=structuredClone(r.teamSettings);
- assert.match(roomSettingsHtml(r),/E\. 팀 설정/);setRoomField(r,'playMode','individual');assert(!roomSettingsHtml(r).includes('E. 팀 설정'));assert(!teamChatEnabled(r));assert.deepEqual(r.teamSettings,before);
- setRoomField(r,'playMode','team');assert.match(roomSettingsHtml(r),/E\. 팀 설정/);r.teamSettings.rolesEnabled=false;assert(!roomSettingsHtml(r).includes('data-role-count'));r.teamSettings.rolesEnabled=true;
+ assert.match(roomSettingsHtml(r),/B\. 플레이 방식 \/ 팀 설정/);setRoomField(r,'playMode','individual');assert(!roomSettingsHtml(r).includes('id="team-settings"'));assert(!teamChatEnabled(r));assert.deepEqual(r.teamSettings,before);
+ setRoomField(r,'playMode','team');assert.match(roomSettingsHtml(r),/B\. 플레이 방식 \/ 팀 설정/);r.teamSettings.rolesEnabled=false;assert(!roomSettingsHtml(r).includes('data-role-count'));r.teamSettings.rolesEnabled=true;
  r.teamSettings.roleViewsEnabled=false;assert(roleVisible(r,r.content[0],'B'));r.teamSettings.roleViewsEnabled=true;assert(!roleVisible(r,r.content[0],'B'));
  r.teamSettings.chatEnabled=false;assert(!roomSettingsHtml(r).includes('채팅방 관리'));assert.equal(r.content[0].chatRoomIds[0],'old');
 });

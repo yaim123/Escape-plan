@@ -1,7 +1,8 @@
+import {progressMeter} from './progress-meter.js';
 import {teamWaitingHtml} from './team-waiting.js';
 import {mountChat} from './chat.js';
 import {questionAnalysisHtml,delayWarningsHtml} from './analysis.js';
-import {renderStudentInfo,mountBgm} from './student-info.js';
+import {renderStudentInfo,mountBgm,rememberStudentInfo,clearStudentInfo} from './student-info.js';
 import {isImmersive,immersiveHtml,mountImmersive} from './immersive.js';
 import {mountAssetFallback} from './asset-fallback.js';
 import {displayAttributes} from './display.js';
@@ -40,7 +41,7 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
   if(!teacher){root.insertAdjacentHTML('beforeend','<button class="btn small" id="leave-playing">수업 나가기</button>');root.classList.add('student-presented');root.insertAdjacentHTML('afterbegin','<div id="student-meta"></div>');}
   const showError=error=>{if(!disposed) root.querySelector('#game-error').textContent=error.message||error;};
   root.querySelector('#game-clock').insertAdjacentHTML('afterend','<div id="qr-progress"></div>');
-  const cleanup=()=>{disposed=true;chat?.dispose();bgm?.dispose();root.classList.remove('student-presented');scanController?.abort();stopWatch?.();clearInterval(timer);clearInterval(clockTimer);clearTimeout(debounce);client.dispose();document.removeEventListener('visibilitychange',visible);window.removeEventListener('online',schedule);return true;};
+  const cleanup=()=>{disposed=true;clearStudentInfo(root);chat?.dispose();bgm?.dispose();root.classList.remove('student-presented');scanController?.abort();stopWatch?.();clearInterval(timer);clearInterval(clockTimer);clearTimeout(debounce);client.dispose();document.removeEventListener('visibilitychange',visible);window.removeEventListener('online',schedule);return true;};
   app.cleanup=cleanup;
   if(!teacher)chat=mountChat(root,lobby,()=>client.token(code));
   const exit=async()=>{const state=teacher?await lobby.teacher('read',initial.sessionId):await lobby.student(code);if(disposed)return;cleanup();onExit(state);};
@@ -53,15 +54,16 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
     root.querySelector('#game-feedback').textContent=feedback;
     root.querySelector('#game-progress').innerHTML=`<section class="play-progress panel"><span>${game.playMode==='team'?`${game.team}조 · 팀원 ${p.memberNumber} · ${esc(p.role)}`:'개인전'}</span><strong>진행 ${p.completedCount}/${p.totalCount}</strong><span>내 오답 ${wrongTotal(p)}회</span><progress max="${Math.max(1,p.totalCount)}" value="${p.completedCount}"></progress></section>`;
     const sceneProgress=root.querySelector('[data-scene-progress]');if(sceneProgress)sceneProgress.textContent=`진행 ${p.completedCount}/${p.totalCount}`;
-    const nextSignature=JSON.stringify([b,game.available,b?.questionType==='qr'?game.qr:null,game.waiting,game.waitingSettings]);
+    const nextSignature=JSON.stringify([b,game.held,game.available,b?.questionType==='qr'?game.qr:null,game.waiting,game.waitingSettings]);
     const drawHints=()=>{const el=root.querySelector('#live-hints');if(el)el.innerHTML=`${(game.revealedHints||[]).map((h,i)=>`<p class="callout">힌트 ${i+1}: ${esc(h)}</p>`).join('')}${game.hasMoreHints?'<button class="btn" data-hint>다음 힌트 보기</button>':''}`;};
     if(signature===nextSignature){drawHints();return;} // Keep in-progress input on realtime/heartbeat updates.
     signature=nextSignature;
-    root.querySelector('#live-content').innerHTML=b?`<section ${displayAttributes(b,game.theme,game.design)}><div class="content-body"><div data-block-meta><div class="eyebrow">STAGE ${esc(b.stage)} · ${esc(BLOCK_TYPES[b.type])}</div><h2>${esc(b.title)}</h2></div><p class="pre-line story-body">${esc(b.body)}</p>${mediaHtml(b.media)}<form id="live-answer">${liveAnswerControls(b,game.qr,game.waitingSettings)}</form><div id="live-hints"></div></div></section>${game.available.length>1?`<nav class="actions available-content" aria-label="공개된 콘텐츠">${game.available.map(item=>`<button class="btn" data-select="${esc(item.id)}" ${item.id===b.id?'disabled':''}>${esc(item.title)}</button>`).join('')}</nav>`:''}`:game.waiting?teamWaitingHtml(game.waiting,game.waitingSettings):`<section class="panel"><h2>${p.completedCount===p.totalCount?'현재 콘텐츠를 모두 완료했습니다.':'다른 팀원 또는 조건을 기다리고 있습니다.'}</h2><p>진행 상태가 바뀌면 자동으로 다음 콘텐츠가 표시됩니다.</p></section>`;
+    root.querySelector('#live-content').innerHTML=b?`<section ${displayAttributes(b,game.theme,game.design)}><div class="content-body"><div data-block-meta><div class="eyebrow">STAGE ${esc(b.stage)} · ${esc(BLOCK_TYPES[b.type])}</div><h2>${esc(b.title)}</h2></div><p class="pre-line story-body">${esc(b.body)}</p>${mediaHtml(b.media)}<form id="live-answer">${liveAnswerControls(b,game.qr,game.waitingSettings)}</form><div id="live-hints"></div></div></section>${game.available.length>1?`<nav class="actions available-content" aria-label="공개된 콘텐츠">${game.available.map(item=>`<button class="btn" data-select="${esc(item.id)}" ${item.id===b.id?'disabled':''}>${esc(item.title)}</button>`).join('')}</nav>`:''}`:game.waiting?(game.held?`<section ${displayAttributes(game.held,game.theme,game.design)}><div class="content-body"><h2>${esc(game.held.title)}</h2><p class="pre-line">${esc(game.held.body)}</p>${mediaHtml(game.held.media)}<small>이전 화면 유지 · 읽기 전용</small></div></section>`:'')+teamWaitingHtml(game.waiting,game.waitingSettings):`<section class="panel"><h2>${p.completedCount===p.totalCount?'현재 콘텐츠를 모두 완료했습니다.':'다른 팀원 또는 조건을 기다리고 있습니다.'}</h2><p>진행 상태가 바뀌면 자동으로 다음 콘텐츠가 표시됩니다.</p></section>`;
     if(isImmersive(b)){
       root.querySelector('#live-content').innerHTML=immersiveHtml(b,{infoHtml:'',title:initial.title,progress:`진행 ${p.completedCount}/${p.totalCount}`,time:root.querySelector('#game-clock').textContent,connection:root.querySelector('#game-connection').textContent});
       mountImmersive(root,async()=>{if(writing||game.status!=='playing')return;writing=true;try{const result=await client.submit(code,b.id,null);apply(result.game,true);}finally{writing=false;if(queued){queued=false;schedule();}}});
     }
+    if(!b&&isImmersive(game.held)&&game.waiting){root.querySelector('#live-content').innerHTML=immersiveHtml(game.held,{infoHtml:'',readOnly:true,prompt:game.waitingSettings?.body,extra:teamWaitingHtml(game.waiting,game.waitingSettings)});mountImmersive(root);}
     mountAssetFallback(root);
     drawHints();
     root.querySelector('#live-answer')?.addEventListener('submit',async event=>{
@@ -69,7 +71,7 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
       const btn=event.target.querySelector('button[type="submit"]');if(btn)btn.disabled=true;
       try {
         const result=await client.submit(code,b.id,answerFromForm(b,event.target));
-        feedback=result.outcome==='wrong'?'아직 정답이 아니에요. 다시 살펴보세요.':result.outcome==='already_complete'?'이미 완료한 콘텐츠입니다.':b.type==='question'?'정답입니다.':'콘텐츠를 완료했습니다.';
+        feedback=result.outcome==='parallel_closed'?result.message:result.outcome==='wrong'?'아직 정답이 아니에요. 다시 살펴보세요.':result.outcome==='already_complete'?'이미 완료한 콘텐츠입니다.':b.type==='question'?'정답입니다.':'콘텐츠를 완료했습니다.';
         apply(result.game, true);
       }catch(error){showError(error);}finally{writing=false;if(btn)btn.disabled=false;if(queued){queued=false;schedule();}}
     });
@@ -84,10 +86,10 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
     root.querySelector('#pause-session').hidden=game.status==='finished';root.querySelector('#finish-session').hidden=game.status==='finished';
     const groups=game.playMode==='team'?[...new Set(rows.map(p=>p.team))].sort((a,b)=>a-b).map(team=>{
       const members=rows.filter(p=>p.team===team),p=members[0]?.progress||{};
-      return `<section class="panel"><h3><button class="btn" data-manage-team="${team}">${team}조 관리</button></h3><strong>평균 진행 ${members.length?Math.round(members.reduce((n,m)=>n+(m.progress?.completedCount||0)/Math.max(1,m.progress?.totalCount||0),0)/members.length*100):0}%</strong><p>${members.length}명 · 오답 합계 ${members.reduce((n,m)=>n+wrongTotal(m.progress),0)}회</p></section>`;
+      return `<section class="panel"><h3><button class="btn" data-manage-team="${team}">${team}조 관리</button></h3>${progressMeter(game.teamProgress?.find(t=>t.team===team)?.percent??(members.length?members.reduce((n,m)=>n+(m.progress?.completedCount||0)/Math.max(1,m.progress?.totalCount||0),0)/members.length*100:0))}<p>${members.length}명 · 오답 합계 ${members.reduce((n,m)=>n+wrongTotal(m.progress),0)}회</p></section>`;
     }).join(''):'';
     root.querySelector('#game-progress').innerHTML=`<div class="teams-grid">${groups}</div>`;
-    root.querySelector('#live-content').innerHTML=`<section class="panel"><h2>참가자별 진행도</h2><div class="progress-table-wrap"><table class="progress-table"><thead><tr><th>학생</th><th>팀원</th><th>현재 콘텐츠</th><th>완료</th><th>오답</th><th>상태 / 완료</th><th>승인</th></tr></thead><tbody>${rows.map(p=>`<tr><td><button class="btn small" data-manage-student="${p.id}">${p.grade}-${p.classroom}-${p.number} ${esc(p.name)}</button></td><td>${p.team?`${p.team}조 · `:''}${p.memberNumber||''} ${esc(p.role)}</td><td>${esc(p.currentTitle||(p.progress?.completedCount===p.progress?.totalCount?'현재 콘텐츠 완료':'조건 대기'))}</td><td>${p.progress?.completedCount||0}/${p.progress?.totalCount||0}</td><td>${wrongTotal(p.progress)}</td><td>${statusLabel(p)}</td><td>${p.approvalBlockId?`<button class="btn small" data-approve="${p.id}" data-block="${p.approvalBlockId}" ${game.status==='paused'?'disabled':''}>활동 승인</button>`:'—'}</td></tr>`).join('')}</tbody></table></div></section>`;
+    root.querySelector('#live-content').innerHTML=`<section class="panel"><h2>참가자별 진행도</h2><div class="progress-table-wrap"><table class="progress-table"><thead><tr><th>학생</th><th>팀원</th><th>현재 콘텐츠</th><th>완료</th><th>오답</th><th>상태 / 완료</th><th>승인</th></tr></thead><tbody>${rows.map(p=>`<tr><td><button class="btn small" data-manage-student="${p.id}">${p.grade}-${p.classroom}-${p.number} ${esc(p.name)}</button></td><td>${p.team?`${p.team}조 · `:''}${p.memberNumber||''} ${esc(p.role)}</td><td>${esc(p.currentTitle||(p.progress?.completedCount===p.progress?.totalCount?'현재 콘텐츠 완료':'조건 대기'))}</td><td>${progressMeter(p.progressPercent??(p.progress?.completedCount||0)/Math.max(1,p.progress?.totalCount||0)*100)}</td><td>${wrongTotal(p.progress)}</td><td>${statusLabel(p)}</td><td>${p.approvalBlockId?`<button class="btn small" data-approve="${p.id}" data-block="${p.approvalBlockId}" ${game.status==='paused'?'disabled':''}>활동 승인</button>`:'—'}</td></tr>`).join('')}</tbody></table></div></section>`;
     root.querySelector('#pause-session').textContent=game.status==='paused'?'게임 재개':'전체 일시정지';
     const auditOpen=root.querySelector('#control-audit details')?.open;
     root.querySelector('#control-audit').innerHTML=auditHtml(game.actions,game.contents);
@@ -109,7 +111,7 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
     if(next.status!=='playing'){scanHolding=false;scanNext=null;}
     if(!keepFeedback && game?.current?.id!==next.current?.id) feedback='';
     const changedBlock=game?.current?.id!==next.current?.id;
-    game=next;if(!teacher)root.querySelector('#leave-playing').disabled=game.status!=='playing'||!!game.result;receivedAt=Date.now();drawClock();root.querySelector('#game-error').textContent='';
+    rememberStudentInfo(root);game=next;if(!teacher)root.querySelector('#leave-playing').disabled=game.status==='paused'&&!game.result;receivedAt=Date.now();drawClock();root.querySelector('#game-error').textContent='';
     if(changedBlock)scanController?.abort();
     if(game.status!=='playing'||game.result||game.current?.questionType!=='qr')scanController?.abort();
     root.querySelector('#qr-progress').innerHTML=teacher?(game.participants||[]).filter(p=>p.qr?.length).map(p=>`<details class="panel"><summary>${esc(game.playMode==='team'?p.team+'조 · '+p.name:p.name)} · QR 진행</summary>${qrProgressHtml(p.qr)}</details>`).join(''):(game.status==='playing'&&!game.result&&game.current?.questionType==='qr'&&!game.qr?.some(m=>m.mode==='UNIQUE_MEMBER'&&m.selfDone&&!m.done)?qrProgressHtml(game.qr):'');
@@ -139,7 +141,7 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
     const btn=event.target.closest('[data-select],[data-approve],#finish-session,#pause-session,#reset-session,#leave-playing,[data-hint]');if(!btn||writing)return;
     writing=true;btn.disabled=true;
     try{
-      if(btn.id==='leave-playing'){if(await confirmDialog('수업에서 나갈까요?','활성 팀원에서 제외됩니다. 단순 새로고침이나 연결 끊김에는 해당하지 않습니다.','수업 나가기')){await lobby.student(code,'leave');lobby.forget(code);cleanup();app.navigate('join/'+code);}}
+      if(btn.id==='leave-playing'){if(await confirmDialog('수업에서 나갈까요?',game.result||game.status==='finished'?'이 기기의 참가 정보를 지우고 학생 정보 입력 화면으로 돌아갑니다. 수업 결과는 보관됩니다.':'활성 팀원에서 제외됩니다. 단순 새로고침이나 연결 끊김에는 해당하지 않습니다.','수업 나가기')){try{await lobby.student(code,'leave');}catch(error){if(error.code!=='42501'||!error.message.includes('참가 기록'))throw error;}lobby.forget(code);cleanup();app.cleanup=null;app.navigate('join/'+code+'?fresh=1');}}
       else if(btn.hasAttribute('data-hint')){apply(await client.hint(code,game.current.id));}
       else if(btn.id==='reset-session'){const keep=await resetChoice();if(keep!==null){const state=await client.finish(initial.sessionId,'reset',keep);cleanup();onExit(state);}}
       else if(btn.id==='pause-session'){apply(await client.control(initial.sessionId,game.status==='paused'?'resume':'pause',{p_scope:'session'},game.revision));}

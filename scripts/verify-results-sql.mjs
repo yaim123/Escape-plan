@@ -21,6 +21,7 @@ if(process.argv.includes('--media')){await (await import('./storage-fixture.mjs'
 if(process.argv.includes('--tools'))await db.exec(await readFile('supabase/012_analysis_print_and_block_library.sql','utf8'));
 if(process.argv.includes('--qr-ux'))await db.exec(await readFile('supabase/013_qr_scan_receipt.sql','utf8'));
 if(process.argv.includes('--team-chat'))await db.exec(await readFile('supabase/014_team_chat_and_rewind.sql','utf8'));if(process.argv.includes('--roles'))await db.exec(await readFile('supabase/015_team_roles_and_visibility.sql','utf8'));
+if(process.argv.includes('--parallel'))await db.exec(await readFile('supabase/016_parallel_flow.sql','utf8'));
 const as=async(role,uid='')=>{await db.exec(`reset role; set role ${role};`);await db.query("select set_config('request.jwt.claim.sub',$1,false)",[uid]);};
 const call=async(sql,args=[])=>(await db.query(sql,args)).rows[0].result;
 const teacher=(action,id)=>call('select public.escape_teacher_lobby($1,$2) result',[action,id]);

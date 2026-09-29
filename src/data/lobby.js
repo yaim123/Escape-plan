@@ -12,7 +12,7 @@ export class LobbyClient {
   }
   key(code) { return `escape-studio:participant:${this.repo.config.url}:${code}`; }
   saved(code) { try { return JSON.parse(this.storage.getItem(this.key(code)) || 'null'); } catch { return null; } }
-  forget(code) { this.storage.removeItem(this.key(code)); }
+  forget(code) { const saved=this.saved(code);this.storage.removeItem(this.key(code));const active=`escape-studio:active-room:${this.repo.config.url}`;if(this.storage.getItem(active)===code)this.storage.removeItem(active);if(saved?.participantId)for(const key of Object.keys(this.storage))if(key.startsWith('escape-studio:chat-seen:')&&key.includes(saved.participantId))this.storage.removeItem(key); }
   rpc(name, body, teacher = false) { return this.repo.request(`/rest/v1/rpc/${name}`, { method: 'POST', body, auth: teacher }); }
   teacher(action, id) { this.repo.requireUser(); return this.rpc('escape_teacher_lobby', { p_action: action, p_id: id }, true); }
   snapshot(contentId,action='inspect',info={}) {this.repo.requireUser();return this.rpc('escape_lobby_snapshot',{p_content:contentId,p_action:action,p_session:info.state?.sessionId||null,p_version:info.version||null,p_snapshot_version:info.snapshotVersion||null,p_allow_assets:action!=='inspect',p_failed_assets:info.failedAssets||[]},true);}

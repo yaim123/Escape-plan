@@ -1,3 +1,4 @@
+import {flowUnits,parallelGroup,parallelState} from './parallel.js';
 import {roleVisible,roleViewsEnabled} from './team-settings.js';
 import { isUnlocked, assignedMembers, isComplete } from './conditions.js';
 import { checkAnswer } from './answers.js';
@@ -18,6 +19,7 @@ export function blockCompleted(room, session, block, member=1) {
 }
 export function blockAvailable(room, session, block, member) {
   if (!roleVisible(room,block,session.members.find(m=>m.member===member)?.role))return false;
+  if(room.parallelGroups?.length)return parallelAvailable(room,session,block,member);
   if (blockCompleted(room, session, block, member)) return false;
   if (room.playMode === 'team' && !assignedMembers(block, session.members, room.content.indexOf(block)).some(m => m.member === member)) return false;
   if (block.unlock.conditions.length) return isUnlocked(block.unlock, [...session.events,...qrTestEvents(room,session,member)]);
@@ -31,7 +33,9 @@ export function recordComplete(room, session, block, member, source = 'test', no
   if (block.questionType === 'approval' && block.type === 'question') add('approved');
   if (block.type !== 'question' || block.questionType === 'switch') add('button');
   add('complete');
+  for(const g of room.parallelGroups||[])if(testParallelStates(room,session,member).find(x=>x.id===g.id)?.done)(session.parallelClosed??={})[g.id]=true;
   const final=room.content.find(b=>b.id===room.rules.finalBlockId),targets=room.rules.finishMode==='final'?(final?[final]:[]):room.content;
+  if(room.parallelGroups?.length){if(session.members.every(m=>room.rules.finishMode==='final'?(parallelGroup(room,final?.id)?session.parallelClosed?.[parallelGroup(room,final.id).id]:!roleVisible(room,final,m.role)||blockCompleted(room,session,final,m.member)):testFlowProgress(room,session,m.member).done))session.finishedAt=now;return;}
   if(targets.length&&session.members.some(m=>targets.some(b=>roleVisible(room,b,m.role)))&&session.members.every(m=>targets.every(b=>!roleVisible(room,b,m.role)||blockCompleted(room,session,b,m.member))))session.finishedAt=now;
 }
 export function submitTestQr(room,session,block,member,qrId) {
@@ -65,11 +69,13 @@ export function revealHint(room, session, block, member) {
   session.hints[key] = count + 1; session.penalties += (room.rules.hintPenaltyType||'time')==='time'?Math.max(0, room.rules.hintPenalty):0; return block.hints[count];
 }
 export function sessionSummary(room, session, now = Date.now(), member=1) {
-  return { total: room.content.filter(b=>roleVisible(room,b,session.members.find(m=>m.member===member)?.role)).length, completed: room.content.filter(b => roleVisible(room,b,session.members.find(m=>m.member===member)?.role)&&blockCompleted(room, session, b, member)).length, wrong: Object.values(session.wrong).reduce((a, b) => a + b, 0), hints: Object.values(session.hints).reduce((a, b) => a + b, 0), seconds: Math.max(0, Math.floor(((session.finishedAt || now) - session.startedAt) / 1000)), penalty: session.penalties, score: Math.max(0,room.content.filter(b => b.type === 'question' && blockCompleted(room, session, b, member)).reduce((sum, b) => sum + Math.max(0, b.points || 0), 0)-(room.rules.wrongPenaltyType==='score'?Object.values(session.wrong).reduce((a,b)=>a+b,0)*room.rules.wrongPenalty:0)-(room.rules.hintPenaltyType==='score'?Object.values(session.hints).reduce((a,b)=>a+b,0)*room.rules.hintPenalty:0)) };
+  const flow=room.parallelGroups?.length?testFlowProgress(room,session,member):null;
+  return { percent:flow?.percent, total: flow?.total??room.content.filter(b=>roleVisible(room,b,session.members.find(m=>m.member===member)?.role)).length, completed: flow?.completed??room.content.filter(b => roleVisible(room,b,session.members.find(m=>m.member===member)?.role)&&blockCompleted(room, session, b, member)).length, wrong: Object.values(session.wrong).reduce((a, b) => a + b, 0), hints: Object.values(session.hints).reduce((a, b) => a + b, 0), seconds: Math.max(0, Math.floor(((session.finishedAt || now) - session.startedAt) / 1000)), penalty: session.penalties, score: Math.max(0,room.content.filter(b => b.type === 'question' && blockCompleted(room, session, b, member)).reduce((sum, b) => sum + Math.max(0, b.points || 0), 0)-(room.rules.wrongPenaltyType==='score'?Object.values(session.wrong).reduce((a,b)=>a+b,0)*room.rules.wrongPenalty:0)-(room.rules.hintPenaltyType==='score'?Object.values(session.hints).reduce((a,b)=>a+b,0)*room.rules.hintPenalty:0)) };
 }
 
 export function testWaiting(room,session,member){
  if(room.playMode!=='team')return null;
+ const parallel=testParallelActive(room,session,member);if(parallel&&!room.content.some(b=>blockAvailable(room,session,b,member)))return {unit:'lanes',found:parallel.lanes.filter(l=>l.done).length,required:2,lanes:parallel.lanes};
  const actor=session.members.find(m=>m.member===member),qrStates=qrTestState(room,session,member);
  for(const b of room.content){
   if(!roleVisible(room,b,actor?.role)||blockCompleted(room,session,b,member))continue;
@@ -78,4 +84,16 @@ export function testWaiting(room,session,member){
   if(session.events.some(e=>e.blockId===b.id&&e.type==='complete'&&e.member===member))return {blockId:b.id,...(b.completion.mode==='all'?{found:new Set(session.events.filter(e=>e.blockId===b.id&&e.type==='complete'&&session.members.some(m=>m.member===e.member)).map(e=>e.member)).size,required:session.members.length}:{})};
  }
  return null;
+}
+
+export function testParallelStates(room,session,member){const role=session.members.find(m=>m.member===member)?.role;return (room.parallelGroups||[]).map(g=>parallelState(room,g,role,id=>{const b=room.content.find(b=>b.id===id),actors=assignedMembers(b,session.members,room.content.indexOf(b)).filter(m=>roleVisible(room,b,m.role));return actors.length>0&&actors.every(m=>blockCompleted(room,session,b,m.member));},session.parallelClosed?.[g.id]));}
+export function testFlowProgress(room,session,member){const role=session.members.find(m=>m.member===member)?.role,states=testParallelStates(room,session,member),units=flowUnits(room).filter(u=>u.group||roleVisible(room,u.block,role));const values=units.map(u=>u.group?states.find(g=>g.id===u.id).fraction:blockCompleted(room,session,u.block,member)?1:0);return {total:units.length,completed:values.filter(n=>n===1).length,percent:units.length?Math.round(values.reduce((a,b)=>a+b,0)/units.length*100):0,done:units.length>0&&values.every(n=>n===1)};}
+export function testParallelActive(room,session,member){const role=session.members.find(m=>m.member===member)?.role,states=testParallelStates(room,session,member);for(const u of flowUnits(room)){if(u.group){const st=states.find(g=>g.id===u.id);if(!st.done)return st;}else if(roleVisible(room,u.block,role)&&!blockCompleted(room,session,u.block,member))return null;}return null;}
+function parallelAvailable(room,session,block,member){
+ const actor=session.members.find(m=>m.member===member);if(!roleVisible(room,block,actor?.role)||blockCompleted(room,session,block,member)||session.events.some(e=>e.type==='complete'&&e.blockId===block.id&&e.member===member)||!assignedMembers(block,session.members,room.content.indexOf(block)).some(m=>m.member===member))return false;
+ const states=testParallelStates(room,session,member);let prior=true;
+ for(const u of flowUnits(room)){
+  if(u.group){const st=states.find(g=>g.id===u.id);if(parallelGroup(room,block.id)?.id===u.id)return prior&&!st.done&&st.blockId===block.id&&isUnlocked(block.unlock,[...session.events,...qrTestEvents(room,session,member)]);prior=prior&&st.done;}
+  else {if(u.id===block.id)return block.unlock.conditions.length?isUnlocked(block.unlock,[...session.events,...qrTestEvents(room,session,member)]):prior;if(roleVisible(room,u.block,actor?.role))prior=prior&&blockCompleted(room,session,u.block,member);}
+ }return false;
 }

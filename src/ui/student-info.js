@@ -8,12 +8,27 @@ export function informationRows(c){
  return Object.entries(DISPLAY_FIELDS).filter(([key])=>values[key]!==null&&values[key]!==undefined&&values[key]!=='').map(([key,label])=>({key,label,value:String(values[key]),mode:displayPolicy(c.studentDisplaySettings,key,c.immersive)}));
 }
 export function informationHtml(c,mode){return informationRows(c).filter(r=>r.mode===mode).map(r=>`<div class="student-info-item" data-info-key="${r.key}"><small>${esc(r.label)}</small><span>${esc(r.value)}</span></div>`).join('');}
+const panels=new WeakMap();
+export function clearStudentInfo(root){panels.delete(root);}
+export function rememberStudentInfo(root){const panel=root.querySelector('[data-scene-panel]')||root.querySelector('[data-info-panel]');if(panel)panels.set(root,{open:!panel.hidden,top:panel.scrollTop,element:panel});}
+function updateRows(host,rows){
+ const keys=new Set(rows.map(r=>r.key));for(const el of host.querySelectorAll('[data-info-key]'))if(!keys.has(el.dataset.infoKey))el.remove();
+ rows.forEach((r,i)=>{let el=host.querySelector(`[data-info-key="${r.key}"]`);if(!el){el=document.createElement('div');el.className='student-info-item';el.dataset.infoKey=r.key;el.innerHTML='<small></small><span></span>';host.append(el);}if(el.children[0].textContent!==r.label)el.children[0].textContent=r.label;if(el.children[1].textContent!==r.value)el.children[1].textContent=r.value;if(host.children[i]!==el)host.insertBefore(el,host.children[i]||null);});
+}
 export function renderStudentInfo(root,c){
- const immersive=root.querySelector('.immersive-scene');c={...c,immersive:!!immersive};
- if(immersive){const host=immersive.querySelector('[data-scene-metadata]');if(host)host.innerHTML=informationHtml(c,'info');return;}
- const host=root.querySelector('#student-meta');if(!host)return;const open=host.querySelector('[data-info-panel]')?.hidden===false;
- const info=informationHtml(c,'info');host.innerHTML=`<div class="student-always">${informationHtml(c,'always')}</div>${info?`<button type="button" class="student-info-button" aria-label="게임 정보" aria-expanded="${open}" data-info-open>ⓘ</button><aside class="student-info-panel" data-info-panel ${open?'':'hidden'}><button class="btn small" type="button" data-info-close>정보 닫기</button>${info}</aside>`:''}`;
- host.onclick=e=>{e.stopPropagation();const panel=host.querySelector('[data-info-panel]');if(e.target.closest('[data-info-open]')){panel.hidden=!panel.hidden;host.querySelector('[data-info-open]').setAttribute('aria-expanded',String(!panel.hidden));}else if(e.target.closest('[data-info-close]')){panel.hidden=true;host.querySelector('[data-info-open]').setAttribute('aria-expanded','false');}};
+ const scene=root.querySelector('.immersive-scene'),saved=panels.get(root)||{open:false,top:0};c={...c,immersive:!!scene};const rows=informationRows(c);
+ let panel,button;
+ if(scene){const host=scene.querySelector('[data-scene-metadata]');if(host)updateRows(host,rows.filter(r=>r.mode==='info'));panel=scene.querySelector('[data-scene-panel]');button=scene.querySelector('[data-scene-info]');}
+ else {const host=root.querySelector('#student-meta');if(!host)return;
+  if(!host.querySelector('[data-info-panel]'))host.innerHTML='<div class="student-always"></div><button type="button" class="student-info-button" aria-label="게임 정보" data-info-open>ⓘ</button><aside class="student-info-panel" data-info-panel hidden><button class="btn small" type="button" data-info-close>정보 닫기</button><div data-info-rows></div></aside>';
+  panel=host.querySelector('[data-info-panel]');button=host.querySelector('[data-info-open]');updateRows(host.querySelector('.student-always'),rows.filter(r=>r.mode==='always'));updateRows(host.querySelector('[data-info-rows]'),rows.filter(r=>r.mode==='info'));button.hidden=!rows.some(r=>r.mode==='info');
+  host.onclick=e=>{e.stopPropagation();if(e.target.closest('[data-info-open]')){panel.hidden=!panel.hidden;if(!panel.hidden)panel.scrollTop=0;}else if(e.target.closest('[data-info-close]'))panel.hidden=true;button.setAttribute('aria-expanded',String(!panel.hidden));rememberStudentInfo(root);};
+ }
+ if(!panel)return;
+ // Preserve the open panel even when the current scene itself was replaced.
+ if(saved.element!==panel){panel.hidden=!saved.open;panel.scrollTop=saved.top;}
+ if(!panel.dataset.infoTracked){panel.dataset.infoTracked='true';panel.addEventListener('scroll',()=>rememberStudentInfo(root),{passive:true});}
+ button?.setAttribute('aria-expanded',String(!panel.hidden));rememberStudentInfo(root);
 }
 export function mountBgm(root,theme={},sound={}){
  const url=safeUrl(theme.bgm);if(!url)return {update(){},dispose(){}};

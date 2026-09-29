@@ -10,7 +10,7 @@ import { resetChoice } from './results.js';
 
 const statusNames = { lobby: '입장 대기 중', playing: '게임 진행 중', paused: '일시정지', finished: '종료됨' };
 function identityFields(p = {}) {
-  return `<div class="identity-grid">${field('학년', `<input name="grade" type="number" min="1" max="12" required value="${esc(p.grade || '')}">`)}${field('반', `<input name="classroom" type="number" min="1" max="99" required value="${esc(p.classroom || '')}">`)}${field('번호', `<input name="number" type="number" min="1" max="999" required value="${esc(p.number || '')}">`)}</div>${field('이름', `<input name="name" maxlength="40" required autocomplete="name" value="${esc(p.name || '')}">`)}`;
+  return `<div class="identity-grid">${field('학년', `<input name="grade" type="number" min="1" max="12" required value="${esc(p.grade || '')}">`)}${field('반', `<input name="classroom" type="number" min="1" max="99" required value="${esc(p.classroom || '')}">`)}${field('번호', `<input name="number" type="number" min="1" max="999" required value="${esc(p.number || '')}">`)}</div>${field('이름', `<input name="name" maxlength="40" required autocomplete="off" value="${esc(p.name || '')}">`)}`;
 }
 function identityFrom(form) { const d = new FormData(form); return { p_grade: Number(d.get('grade')), p_class: Number(d.get('classroom')), p_number: Number(d.get('number')), p_name: String(d.get('name')).trim() }; }
 function rosterHtml(state, isTeacher) {
@@ -83,7 +83,7 @@ function mountLive(root, app, client, initial, { code, teacher = false, contentI
 }
 
 export async function renderStudentEntry(root, app, routeCode = '', restore = true) {
-  const client = new LobbyClient(); const code = /^\d{6}$/.test(routeCode) ? routeCode : codeFromUrl();
+  const client = new LobbyClient(); if(new URLSearchParams(location.hash.split('?')[1]).get('fresh')==='1')restore=false;const code = /^\d{6}$/.test(routeCode) ? routeCode : codeFromUrl();
   let restoreError = '';
   if (restore && code && client.saved(code)?.participantId) {
     try { const state = await client.student(code, 'touch'); mountLive(root, app, client, state, { code }); return; }

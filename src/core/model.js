@@ -1,3 +1,4 @@
+import {validateParallel} from './parallel.js';
 import {validateTeamSettings,waitingSettings} from './team-settings.js';
 import {validateChat} from './chat.js';
 import {classification} from './classification.js';
@@ -29,6 +30,7 @@ export function duplicateRoom(room) {
   for(const m of copy.qrMissions||[]){m.id=ids.get(m.id);m.result.targetId=ids.get(m.result.targetId)||null;for(const q of m.codes){q.id=ids.get(q.id);q.token=qrToken();}}
   copy.content.forEach(b => { b.id = ids.get(b.id); if(b.qrId)b.qrId=ids.get(b.qrId)||b.qrId; if(b.qrMissionId)b.qrMissionId=ids.get(b.qrMissionId)||b.qrMissionId; b.unlock.conditions.forEach(c => { c.blockId = ids.get(c.blockId) || c.blockId; }); });
   for(const m of copy.qrMissions||[])if(m.blockId)m.blockId=ids.get(m.blockId)||m.blockId;
+  for(const g of copy.parallelGroups||[]){g.id=uid();for(const s of g.steps){s.id=uid();for(const c of s.cells)if(c.blockId)c.blockId=ids.get(c.blockId);}}
   return copy;
 }
 export function safeUrl(value) {
@@ -43,7 +45,7 @@ export function validateRoom(room) {
   if (!['individual', 'team'].includes(room.playMode)) errors.push('플레이 방식이 올바르지 않습니다.');
   if (!Array.isArray(room.content) || room.content.length > 200) return [...errors, '콘텐츠는 최대 200개까지 지원합니다.'];
   for (const k of ['description', 'subject', 'successMessage']) if (typeof room[k] !== 'string') errors.push('방탈출 설명 형식이 올바르지 않습니다.');
-  errors.push(...validateChat(room),...validateTeamSettings(room));
+  errors.push(...validateChat(room),...validateTeamSettings(room),...validateParallel(room));
     const ids = new Set(room.content.map(b => b?.id));
   if (ids.size !== room.content.length) errors.push('중복된 블록 ID가 있습니다.');
   const qrKinds=new Map(),tokens=new Set();
@@ -166,6 +168,7 @@ export function validateDraft(r) {
     ids.add(b.id);
   }
   if(r.qrMissions!==undefined&&(!Array.isArray(r.qrMissions)||r.qrMissions.some(m=>!m||!Array.isArray(m.codes)||!m.assignment||!m.result)))return ['QR 데이터 구조가 올바르지 않습니다.'];
+  if(r.parallelGroups!==undefined&&(!Array.isArray(r.parallelGroups)||r.parallelGroups.some(g=>!g||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(g.id||'')||!Array.isArray(g.lanes)||g.lanes.length!==2||g.lanes.some(l=>!l)||!Array.isArray(g.steps)||!g.steps.length||g.steps.some((s,n)=>!Array.isArray(s?.cells)||s.cells.length!==2||s.cells.some(c=>!c||(c.hold?n===0:!ids.has(c.blockId)))))))return ['병렬 데이터 구조가 올바르지 않습니다.'];
   if(JSON.stringify(r).length>2_000_000)return ['콘텐츠는 2MB 이하여야 합니다.'];
   return [];
 }
