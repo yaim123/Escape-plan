@@ -10,18 +10,18 @@ export function expandRoleRows(rows){
 export const audienceRoles=b=>Array.isArray(b.assignment?.visibleRoles)?b.assignment.visibleRoles:b.assignment?.mode==='role'?[b.assignment.role]:[];
 export const roleVisible=(room,b,role)=>!roleViewsEnabled(room)||!audienceRoles(b).length||audienceRoles(b).includes(role);
 export function roleReferences(room,name){return {blocks:room.content.filter(b=>audienceRoles(b).includes(name)||b.assignment?.mode==='role'&&b.assignment.role===name||b.completion?.mode==='role'&&b.completion.role===name||b.unlock?.conditions.some(c=>c.role===name)).length,chats:(room.chatRooms||[]).filter(c=>c.scope==='roles'&&c.roles.includes(name)).length};}
-export function validateTeamSettings(room){
+export function validateTeamSettings(room,emit){
  if(room.playMode!=='team')return [];
- const errors=[],t=room.teamSettings||{},names=roleNames(room);
+ let scope=[];const add=(...messages)=>{for(const message of messages){errors.push(message);emit?.(message,scope);}};const errors=[],t=room.teamSettings||{},names=roleNames(room);
  if(t.rolesEnabled){
-  if(!names.length||names.some(n=>typeof n!=='string'||!n.trim()||n.length>80))errors.push('역할 이름과 인원을 확인하세요.');
-  for(const b of room.content){
+  if(!names.length||names.some(n=>typeof n!=='string'||!n.trim()||n.length>80))add('역할 이름과 인원을 확인하세요.');
+  for(const b of room.content){scope=[b.id];
    const audience=roleViewsEnabled(room)?audienceRoles(b):[],refs=[...audience,...(b.assignment?.mode==='role'?[b.assignment.role]:[]),...(b.completion?.mode==='role'?[b.completion.role]:[]),...(b.unlock?.conditions||[]).map(c=>c.role).filter(Boolean)];
-   if(refs.some(n=>!names.includes(n)))errors.push(`${b.title}: 존재하지 않는 역할을 참조합니다. 대상과 조건을 수정하세요.`);
+   if(refs.some(n=>!names.includes(n)))add(`${b.title}: 존재하지 않는 역할을 참조합니다. 대상과 조건을 수정하세요.`);
    if(audience.length){
-    if(b.assignment.mode==='role'&&!audience.includes(b.assignment.role)||b.completion.mode==='role'&&!audience.includes(b.completion.role))errors.push(`${b.title}: 표시 대상과 배정·완료 역할이 겹치지 않습니다.`);
-    if(b.questionType!=='qr'&&b.completion.mode==='all'&&names.some(n=>!audience.includes(n)))errors.push(`${b.title}: 역할 전용 블록은 특정 역할 또는 배정된 팀원 완료 조건을 사용하세요.`);
-    if(b.questionType==='qr'&&(room.qrMissions||[]).some(m=>m.id===b.qrMissionId&&m.mode==='UNIQUE_MEMBER')&&names.some(n=>!audience.includes(n)))errors.push(`${b.title}: 팀원별 서로 다른 QR은 모든 팀원이 볼 수 있어야 합니다.`);
+    if(b.assignment.mode==='role'&&!audience.includes(b.assignment.role)||b.completion.mode==='role'&&!audience.includes(b.completion.role))add(`${b.title}: 표시 대상과 배정·완료 역할이 겹치지 않습니다.`);
+    if(b.questionType!=='qr'&&b.completion.mode==='all'&&names.some(n=>!audience.includes(n)))add(`${b.title}: 역할 전용 블록은 특정 역할 또는 배정된 팀원 완료 조건을 사용하세요.`);
+    if(b.questionType==='qr'&&(room.qrMissions||[]).some(m=>m.id===b.qrMissionId&&m.mode==='UNIQUE_MEMBER')&&names.some(n=>!audience.includes(n)))add(`${b.title}: 팀원별 서로 다른 QR은 모든 팀원이 볼 수 있어야 합니다.`);
    }
   }
  }

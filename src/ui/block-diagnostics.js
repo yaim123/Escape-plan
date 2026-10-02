@@ -1,0 +1,3 @@
+import {esc} from './dom.js';
+export function diagnosticBadge(issues=[]){if(!issues.length)return '';const severity=issues.some(i=>i.severity==='error')?'error':'warning';return `<span class="block-diagnostic ${severity}" role="img" aria-label="${severity==='error'?'실행 오류':'확인 경고'} ${issues.length}개" title="${esc(issues.map(i=>i.message).join('\n'))}">⚠</span>`;}
+export function blockDiagnosticsHtml(issues=[]){if(!issues.length)return '';return `<aside class="block-diagnostics" aria-live="polite"><strong>⚠ ${issues.some(i=>i.severity==='error')?'이 콘텐츠는 실행 전에 수정이 필요합니다.':'이 콘텐츠의 설정을 확인해주세요.'}</strong><ul>${issues.map(i=>`<li class="${i.severity}">${esc(i.message)}</li>`).join('')}</ul></aside>`;}

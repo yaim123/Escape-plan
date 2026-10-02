@@ -1,3 +1,4 @@
+import {normalizeManualCode} from '../core/qr.js';
 import {qrSuccessDetail} from '../core/qr-feedback.js';
 import {esc,field,options,modal,toast} from './dom.js';
 import {newQrMission,newQr,qrUrl,readQr} from '../core/qr.js';
@@ -6,10 +7,10 @@ const loads=new Map();
 export function qrLibrary(name){if(!loads.has(name))loads.set(name,new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL(`../vendor/${name}.js`,import.meta.url).href;script.onload=resolve;script.onerror=()=>{loads.delete(name);reject(Error('QR 도구를 불러오지 못했습니다.'));};document.head.append(script);}));return loads.get(name);}
 export function qrProgressHtml(rows=[]){return rows.length?`<section class="panel qr-progress"><h3>QR 단서</h3>${rows.map(m=>`<p>${esc(m.name)} <strong>${m.found} / ${m.mode==='UNIQUE_MEMBER'?m.required:m.total}${m.mode==='UNIQUE_MEMBER'?'명':''}</strong> ${m.done?'✅ 완료':''}${m.insufficient?' · 팀원 수 이상의 활성 QR이 필요합니다.':''}</p>`).join('')}</section>`:'';}
 // Server state commits immediately; only presentation waits for acknowledgement.
-export function scanQrDialog(signal,onScan,{onChat}={}){return new Promise(resolve=>{
+export function scanQrDialog(signal,onScan,{onChat,manual=false}={}){return new Promise(resolve=>{
  let stream,timer,closed=false,busy=false,lastToken=null,accepted=null,starting=false;
  const stop=()=>{clearTimeout(timer);stream?.getTracks().forEach(t=>t.stop());};
- const d=modal(`<div class="modal-body qr-scanner"><div class="qr-scan-inputs"><h2>QR 스캔</h2>${onChat?'<button class="btn" type="button" id="qr-open-chat">팀 채팅 열기</button>':''}<p>카메라로 QR을 비추거나 QR 이미지·링크를 읽으세요.</p><video id="qr-video" playsinline muted></video><button type="button" class="btn primary" id="qr-camera">카메라 켜기</button>${field('QR 이미지 선택','<input id="qr-image" type="file" accept="image/*">')}<form id="qr-link-form">${field('QR 링크 입력','<input name="link" type="text" required autocomplete="off">')}<button class="btn" type="submit">QR 링크 확인</button></form><p id="qr-error" role="status"></p></div><div class="scanner-error" hidden role="alertdialog" aria-modal="true" aria-labelledby="scan-error-title" aria-describedby="scan-error-detail"><div><h2 id="scan-error-title"></h2><p id="scan-error-detail"></p><button class="btn primary" type="button" id="qr-retry">확인</button></div></div></div>`);
+ const d=modal(`<div class="modal-body qr-scanner"><div class="qr-scan-inputs"><h2>${manual?'코드 직접 입력':'QR 스캔'}</h2>${onChat?'<button class="btn" type="button" id="qr-open-chat">팀 채팅 열기</button>':''}<div ${manual?'hidden':''}><p>카메라로 QR을 비추거나 QR 이미지·링크를 읽으세요.</p><video id="qr-video" playsinline muted></video><button type="button" class="btn primary" id="qr-camera">카메라 켜기</button>${field('QR 이미지 선택','<input id="qr-image" type="file" accept="image/*">')}</div><form id="qr-link-form">${field(manual?'직접 입력 코드':'QR 링크 입력',`<input name="link" type="text" required autocomplete="off" ${manual?'maxlength="8" autocapitalize="characters" placeholder="X7K4P2"':''}>`)}<button class="btn" type="submit">${manual?'코드 확인':'QR 링크 확인'}</button></form><p id="qr-error" role="status"></p></div><div class="scanner-error" hidden role="alertdialog" aria-modal="true" aria-labelledby="scan-error-title" aria-describedby="scan-error-detail"><div><h2 id="scan-error-title"></h2><p id="scan-error-detail"></p><button class="btn primary" type="button" id="qr-retry">확인</button></div></div></div>`);
  const inputs=d.querySelector('.qr-scan-inputs'),overlay=d.querySelector('.scanner-error'),ack=d.querySelector('#qr-retry'),close=d.querySelector('.modal-close');
  const setBusy=value=>{busy=value;inputs.inert=value;close.disabled=value;};
  const error=e=>{if(!closed)d.querySelector('#qr-error').textContent=e.message||e;};
@@ -23,9 +24,9 @@ export function scanQrDialog(signal,onScan,{onChat}={}){return new Promise(resol
  const cancel=e=>{if(busy)e.preventDefault();};d.addEventListener('cancel',cancel);
  const focusResult=e=>{if(!overlay.hidden&&e.key==='Tab'){e.preventDefault();ack.focus();}};d.addEventListener('keydown',focusResult);
  const finish=async(value,fromCamera=false)=>{
-  if(closed||busy)return;const token=readQr(value);if(fromCamera&&token===lastToken)return;setBusy(true);
-  try{if(!token)throw Error('올바른 QR이 아닙니다.');lastToken=token;const result=onScan?await onScan(token):{token};if(closed)return;
-   if(result?.duplicate){showResult('이미 찾은 QR입니다.',result.message||'다른 QR을 찾아보세요.',false);accepted={...result,keepOpen:true};return;}
+  if(closed||busy)return;const token=manual?normalizeManualCode(value):readQr(value);if(fromCamera&&token===lastToken)return;setBusy(true);
+  try{if(!token||manual&&!/^[A-HJ-NP-Z2-9]{6}$/.test(token))throw Error(manual?'코드를 확인해주세요.':'올바른 QR이 아닙니다.');lastToken=token;const result=onScan?await onScan(token):{token};if(closed)return;
+   if(result?.duplicate){showResult('이미 찾은 QR입니다.',result.message||'다른 QR을 찾아보세요.',false);accepted={...result,keepOpen:result.keepOpen!==false};return;}
    accepted=result||{};showResult('QR을 찾았습니다!',qrSuccessDetail(result?.progress),true);
   }catch(e){showResult('QR을 확인하지 못했습니다.',e.message||String(e),false);}
  };

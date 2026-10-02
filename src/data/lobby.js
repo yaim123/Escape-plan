@@ -21,10 +21,12 @@ export class LobbyClient {
     // Persist BEFORE sending: a lost response/reload retries the same identity.
     this.storage.setItem(this.key(code), JSON.stringify({ token, ...identity }));
     const result = await this.rpc('escape_join_lobby', { p_code: code, p_token: token, ...identity });
+    if(result.requiresRecovery)return result;
     this.storage.setItem(this.key(code), JSON.stringify({ token, ...identity, participantId: result.participantId, sessionId: result.sessionId }));
     this.storage.setItem(`escape-studio:active-room:${this.repo.config.url}`,code);
     return result;
   }
+  async recover(code,challenge){const saved=this.saved(code);if(!saved?.token)throw Error('복구 확인을 다시 진행해주세요.');const result=await this.rpc('escape_recover_participant',{p_code:code,p_token:saved.token,p_challenge:challenge});this.storage.setItem(this.key(code),JSON.stringify({...saved,participantId:result.participantId,sessionId:result.sessionId}));this.storage.setItem(`escape-studio:active-room:${this.repo.config.url}`,code);return result;}
   student(code, action = 'read', extra = {}) {
     const saved = this.saved(code); if (!saved?.token) throw Error('참가 기록이 없습니다. 방 코드로 입장하세요.');
     return this.rpc('escape_student_lobby', { p_token: saved.token, p_action: action, ...extra });

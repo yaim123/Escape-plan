@@ -94,7 +94,8 @@ export async function renderStudentEntry(root, app, routeCode = '', restore = tr
   root.querySelector('form').onsubmit = async e => {
     e.preventDefault(); const form = e.target, btn = form.querySelector('button'), code = String(new FormData(form).get('code')).trim(); btn.disabled = true;
     try {
-      const state = await client.join(code, identityFrom(form));
+      let state = await client.join(code, identityFrom(form));
+      if(state.requiresRecovery){if(!await confirmDialog('이미 이 수업에 참여 중입니다.','기존 진행으로 돌아갈까요? 이전 기기의 참가 연결은 종료됩니다.','기존 진행으로 돌아가기'))return;state=await client.recover(code,state.challenge);}
       history.replaceState(null, '', '#/join/' + code);
       mountLive(root, app, client, state, { code });
     } catch (err) { form.querySelector('.form-message').textContent = err.message; } finally { btn.disabled = false; }

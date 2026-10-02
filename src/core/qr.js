@@ -1,5 +1,8 @@
 export const qrToken=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
-export const newQr=()=>({id:crypto.randomUUID(),token:qrToken(),name:'새 QR',active:true});
+export const manualCode=()=>Array.from(crypto.getRandomValues(new Uint8Array(6)),x=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[x%32]).join('');
+export const normalizeManualCode=value=>String(value||'').replace(/\s/g,'').toUpperCase();
+export function ensureManualCodes(room){const used=new Set();for(const m of room.qrMissions||[])for(const q of m.codes||[]){if(!/^[A-HJ-NP-Z2-9]{6}$/.test(q.manualCode||'')||used.has(q.manualCode)){do{q.manualCode=manualCode();}while(used.has(q.manualCode));}used.add(q.manualCode);}return room;}
+export const newQr=()=>({id:crypto.randomUUID(),token:qrToken(),manualCode:manualCode(),name:'새 QR',active:true});
 export const newQrMission=()=>({id:crypto.randomUUID(),name:'QR 미션',active:true,scope:'team',mode:'ANY',count:1,assignment:{mode:'all',member:1,role:'조장'},result:{type:'condition',targetId:null},codes:[newQr()]});
 export function readQr(value){const s=String(value||'').trim();if(/^[a-f0-9]{64}$/.test(s))return s;try{const u=new URL(s);const token=u.searchParams.get('qr');return ['http:','https:'].includes(u.protocol)&&/^[a-f0-9]{64}$/.test(token||'')?token:null;}catch{return null;}}
 export function qrUrl(token,base){if(!readQr(token))throw Error('QR 식별자가 올바르지 않습니다.');const u=new URL(base);if(!['http:','https:'].includes(u.protocol))throw Error('http(s) 사이트 주소를 입력하세요.');u.hash='';u.search='';u.searchParams.set('qr',token);return u.href;}

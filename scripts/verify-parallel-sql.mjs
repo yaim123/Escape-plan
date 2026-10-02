@@ -42,6 +42,7 @@ function fixture(mode,scope,condition){const r=newRoom('검증 '+mode+scope+cond
 await db.exec(await readFile('supabase/014_team_chat_and_rewind.sql','utf8'));
 await db.exec(await readFile('supabase/015_team_roles_and_visibility.sql','utf8'));
 await db.exec(await readFile('supabase/016_parallel_flow.sql','utf8'));
+if(process.argv.includes('--recovery')){await db.exec(await readFile('supabase/017_qr_manual_code.sql','utf8'));await db.exec(await readFile('supabase/018_duplicate_participant_recovery.sql','utf8'));}
 
 const chat=(t,action='list',room=null,text=null)=>call('select public.escape_chat($1,$2,$3,$4,$5) result',[t,action,room,text,crypto.randomUUID()]);
 async function setup(r,n,teams=[]){const sid=(await save(r)).sessionId;await as('anon');const ids=[];for(let i=0;i<n;i++){ids.push((await join(r,tokens[i],i+1)).participantId);await lobby(tokens[i],teams[i]||1);}await as('authenticated',A);return {sid,ids};}

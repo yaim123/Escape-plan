@@ -18,7 +18,7 @@ import { BLOCK_TYPES } from '../core/model.js';
 export function liveAnswerControls(b,qr=[],waitingSettings) {
   if(b.type!=='question') return `<button class="btn primary" type="submit">${esc(b.buttonText||'계속하기')}</button>`;
   if(b.questionType==='qr'&&qr.some(m=>m.mode==='UNIQUE_MEMBER'&&m.selfDone&&!m.done))return teamWaitingHtml(qr.find(m=>m.mode==='UNIQUE_MEMBER'&&m.selfDone&&!m.done),waitingSettings);
-  if(b.questionType==='qr') return `<button class="btn primary" type="button" data-question-qr="${esc(b.id)}">QR 코드 스캔</button>`;
+  if(b.questionType==='qr') return `<button class="btn primary" type="button" data-question-qr="${esc(b.id)}">QR 코드 스캔</button><button class="btn small qr-manual-entry" type="button" data-question-qr-manual="${esc(b.id)}">코드 직접 입력</button>`;
   if(b.questionType==='approval') return '<p class="callout">활동을 마친 뒤 교사의 승인을 기다려 주세요.</p>';
   if(['switch','condition'].includes(b.questionType)) return `<button class="btn primary" type="submit">${b.questionType==='switch'?'스위치 작동하기':'조건 확인하고 계속하기'}</button>`;
   let controls;
@@ -130,12 +130,12 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
   document.addEventListener('visibilitychange',visible);window.addEventListener('online',schedule);
   clockTimer=setInterval(()=>{drawClock();drawDelays();},1000);
   root.onclick=async event=>{
-    const scanButton=event.target.closest('[data-question-qr]');
-    if(scanButton){if(writing||scanController)return;const blockId=scanButton.dataset.questionQr;scanController=new AbortController();
+    const scanButton=event.target.closest('[data-question-qr],[data-question-qr-manual]');
+    if(scanButton){if(writing||scanController)return;const manual=scanButton.hasAttribute('data-question-qr-manual'),blockId=scanButton.dataset.questionQr||scanButton.dataset.questionQrManual;scanController=new AbortController();
       try{await scanQrDialog(scanController.signal,async token=>{writing=true;scanHolding=true;try{
-        const r=await lobby.rpc('escape_answer_qr',{p_token:client.token(code),p_qr:token,p_block:blockId});
-        feedback=r.message;apply(r.game,true);return {keepOpen:r.game.status==='playing'&&!r.game.result&&r.game.current?.id===blockId&&!(r.qrScan?.mode==='UNIQUE_MEMBER'&&r.qrScan.selfDone),message:r.message,duplicate:r.duplicate,progress:r.qrScan,onConfirm:releaseScan};
-      }catch(error){releaseScan();throw error;}finally{writing=false;if(queued){queued=false;schedule();}}},{onChat:chat?.available()?()=>chat.open():null});}finally{scanController=null;releaseScan();if(queued){queued=false;schedule();}}return;
+        const r=await lobby.rpc(manual?'escape_answer_qr_manual':'escape_answer_qr',{p_token:client.token(code),[manual?'p_code':'p_qr']:token,p_block:blockId});
+        if(r.error)throw Error(r.error);feedback=r.message;apply(r.game,true);return {keepOpen:r.game.status==='playing'&&!r.game.result&&r.game.current?.id===blockId&&!(r.qrScan?.mode==='UNIQUE_MEMBER'&&r.qrScan.selfDone),message:r.message,duplicate:r.duplicate,progress:r.qrScan,onConfirm:releaseScan};
+      }catch(error){releaseScan();throw error;}finally{writing=false;if(queued){queued=false;schedule();}}},{manual,onChat:chat?.available()?()=>chat.open():null});}finally{scanController=null;releaseScan();if(queued){queued=false;schedule();}}return;
     }
     const manage=event.target.closest('[data-manage-student],[data-manage-team],[data-close-control]');if(manage){if(game.status==='finished')return;if(manage.hasAttribute('data-close-control')){root.querySelector('#control-panel').innerHTML='';panelTarget=null;}else openPanel(manage.dataset.manageStudent?{scope:'student',participant:manage.dataset.manageStudent}:{scope:'team',team:Number(manage.dataset.manageTeam)});return;}
     const btn=event.target.closest('[data-select],[data-approve],#finish-session,#pause-session,#reset-session,#leave-playing,[data-hint]');if(!btn||writing)return;

@@ -16,20 +16,20 @@ export function addParallelStep(room,g,stageId,makeBlock){
 }
 export function laneRoles(room,g,lane,roles){for(const s of g.steps){const b=room.content.find(b=>b.id===s.cells[lane].blockId);if(b)b.assignment.visibleRoles=[...roles];}}
 export function moveFlowUnit(room,id,delta){const units=flowUnits(room),i=units.findIndex(u=>u.id===id||u.block.id===id),j=i+delta;if(i<0||j<0||j>=units.length)return;const unit=units[i],target=units[j],ids=unit.group?parallelIds(unit.group):[unit.id],moving=room.content.filter(b=>ids.includes(b.id));const targetIds=target.group?parallelIds(target.group):[target.id];room.content=room.content.filter(b=>!ids.includes(b.id));const index=delta<0?room.content.findIndex(b=>targetIds.includes(b.id)):Math.max(...targetIds.map(id=>room.content.findIndex(b=>b.id===id)))+1;for(const b of moving)b.stageId=target.block.stageId;room.content.splice(index,0,...moving);}
-export function validateParallel(room){
+export function validateParallel(room,emit){
  const groups=room.parallelGroups||[];if(!Array.isArray(groups))return ['병렬 구간 형식을 확인하세요.'];if(!groups.length)return [];
- const errors=[],seen=new Set(),groupIds=new Set();if(!roleViewsEnabled(room))errors.push('병렬 진행은 팀전·역할 사용·역할별 화면 분리가 필요합니다.');
- for(const g of groups){
-  if(!g||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(g.id||'')||groupIds.has(g.id)||!['AND','OR'].includes(g.mode)||!Array.isArray(g.lanes)||g.lanes.length!==2||g.lanes.some(l=>!l)||!Array.isArray(g.steps)||!g.steps.length||g.steps.length>100||g.steps.some(s=>!Array.isArray(s?.cells)||s.cells.length!==2||s.cells.some(c=>!c||typeof c!=='object'))){errors.push('병렬 구간 형식을 확인하세요.');continue;}
+ let scope=groups.flatMap(parallelIds);const add=(...messages)=>{for(const message of messages){errors.push(message);emit?.(message,scope);}};const errors=[],seen=new Set(),groupIds=new Set();if(!roleViewsEnabled(room))add('병렬 진행은 팀전·역할 사용·역할별 화면 분리가 필요합니다.');
+ for(const g of groups){scope=parallelIds(g);
+  if(!g||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(g.id||'')||groupIds.has(g.id)||!['AND','OR'].includes(g.mode)||!Array.isArray(g.lanes)||g.lanes.length!==2||g.lanes.some(l=>!l)||!Array.isArray(g.steps)||!g.steps.length||g.steps.length>100||g.steps.some(s=>!Array.isArray(s?.cells)||s.cells.length!==2||s.cells.some(c=>!c||typeof c!=='object'))){add('병렬 구간 형식을 확인하세요.');continue;}
   groupIds.add(g.id);
   const ids=parallelIds(g),blocks=ids.map(id=>room.content.find(b=>b.id===id));
-  if(ids.some(id=>seen.has(id))||new Set(ids).size!==ids.length||blocks.some(b=>!b)){errors.push('병렬 블록은 다른 구간과 중복 없이 연결하세요.');continue;}ids.forEach(id=>seen.add(id));
-  const indices=ids.map(id=>room.content.findIndex(b=>b.id===id));if(Math.max(...indices)-Math.min(...indices)+1!==ids.length||new Set(blocks.map(b=>b.stageId)).size!==1)errors.push('병렬 구간은 같은 스테이지에서 연속된 하나의 묶음이어야 합니다.');
+  if(ids.some(id=>seen.has(id))||new Set(ids).size!==ids.length||blocks.some(b=>!b)){add('병렬 블록은 다른 구간과 중복 없이 연결하세요.');continue;}ids.forEach(id=>seen.add(id));
+  const indices=ids.map(id=>room.content.findIndex(b=>b.id===id));if(Math.max(...indices)-Math.min(...indices)+1!==ids.length||new Set(blocks.map(b=>b.stageId)).size!==1)add('병렬 구간은 같은 스테이지에서 연속된 하나의 묶음이어야 합니다.');
   const roles=g.lanes.map((_,i)=>audienceRoles(room.content.find(b=>b.id===g.steps[0].cells[i]?.blockId)||{}));
-  if(roles.some(rs=>!rs.length)||roles[0].some(r=>roles[1].includes(r)))errors.push('A/B 경로에는 겹치지 않는 역할을 선택하세요.');
+  if(roles.some(rs=>!rs.length)||roles[0].some(r=>roles[1].includes(r)))add('A/B 경로에는 겹치지 않는 역할을 선택하세요.');
   for(const [n,s] of g.steps.entries()){
-   if(s.cells?.length!==2||s.cells.every(c=>c.hold)||n===0&&s.cells.some(c=>c.hold))errors.push('첫 단계는 새 화면이며, 각 단계에는 새 콘텐츠가 하나 이상 필요합니다.');
-   for(const [i,c] of s.cells.entries()){if(c.hold){if(c.blockId)errors.push('유지 화면에는 새 블록을 연결하지 않습니다.');continue;}const b=room.content.find(b=>b.id===c.blockId);if(b&&JSON.stringify(audienceRoles(b))!==JSON.stringify(roles[i]))errors.push('같은 경로의 표시 역할은 동일해야 합니다.');}
+   if(s.cells?.length!==2||s.cells.every(c=>c.hold)||n===0&&s.cells.some(c=>c.hold))add('첫 단계는 새 화면이며, 각 단계에는 새 콘텐츠가 하나 이상 필요합니다.');
+   for(const [i,c] of s.cells.entries()){if(c.hold){if(c.blockId)add('유지 화면에는 새 블록을 연결하지 않습니다.');continue;}const b=room.content.find(b=>b.id===c.blockId);if(b&&JSON.stringify(audienceRoles(b))!==JSON.stringify(roles[i]))add('같은 경로의 표시 역할은 동일해야 합니다.');}
   }
  }
  return errors;
