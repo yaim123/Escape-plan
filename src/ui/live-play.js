@@ -7,13 +7,14 @@ import {isImmersive,immersiveHtml,mountImmersive} from './immersive.js';
 import {mountAssetFallback} from './asset-fallback.js';
 import {displayAttributes} from './display.js';
 import { resultHtml, resultTable, resetChoice } from './results.js';
-import {qrProgressHtml,scanQrDialog} from './qr.js';
+import {qrProgressHtml,scanQrDialog,qrLibrary} from './qr.js';
+import {studentJoinUrl} from '../data/lobby.js';
 import { LivePlayClient } from '../data/play.js';
 import { watchLobby } from '../data/realtime.js';
 import { esc, options, confirmDialog } from './dom.js';
 import { mediaHtml } from './media.js';
 import { controlPanel, auditHtml, elapsedLabel } from './teacher-controls.js';
-import { BLOCK_TYPES } from '../core/model.js';
+import { BLOCK_TYPES, safeUrl } from '../core/model.js';
 
 export function liveAnswerControls(b,qr=[],waitingSettings) {
   if(b.type!=='question') return `<button class="btn primary" type="submit">${esc(b.buttonText||'계속하기')}</button>`;
@@ -38,6 +39,12 @@ export function mountLiveGame(root,app,lobby,initial,{code,teacher=false,onExit,
   let chat,scanController,bgm,scanHolding=false,scanNext=null;
   const client=new LivePlayClient(lobby); let game=null, disposed=false, loading=false, queued=false, writing=false, signature='', feedback='', stopWatch, timer, debounce, clockTimer, receivedAt=Date.now(), panelTarget=null, panelRevision=null;
   root.innerHTML=`${teacher?`<div class="actions"><a class="btn class-back" href="#/editor/${esc(contentId)}">← 방탈출 편집</a></div>`:''}<div class="page-heading"><div><span class="eyebrow">${teacher?'LIVE PROGRESS':'LIVE PLAY'}</span><h1>${esc(initial.title)}</h1><p>${teacher?'학생과 팀의 진행 상태를 실시간으로 확인합니다.':'단서를 살펴보고 다음 콘텐츠를 열어보세요.'}</p></div><span id="game-connection" role="status">실시간 연결 중…</span></div><div id="game-error" role="alert"></div><p id="game-feedback" role="status"></p><p id="game-clock" role="timer"></p><div id="arrival-summary"></div>${teacher?'<div id="question-analysis"></div><div id="delay-warnings"></div>':''}<div id="game-progress"></div><div id="live-content"><p>진행 상태를 불러오는 중…</p></div>${teacher?'<div id="control-panel"></div><div id="control-audit"></div><div class="actions"><button class="btn primary" id="pause-session">전체 일시정지</button><button class="btn" id="finish-session">수업 종료</button><button class="btn" id="reset-session">수업 완료 및 초기화</button></div>':''}`;
+  if(teacher){
+    const joinUrl=studentJoinUrl(code||'',safeUrl(initial.qrBaseUrl)||location.origin+location.pathname);
+    root.querySelector('#game-error').insertAdjacentHTML('beforebegin',`<section class="panel"><p>학생 입장 QR · 입장 코드 <strong class="room-code">${esc(code)}</strong></p><div class="entry-qr" id="entry-qr" aria-label="학생 입장 QR"></div></section>`);
+    const qrRoot=root.querySelector('#entry-qr');
+    qrLibrary('qrcode-generator').then(()=>{if(disposed||!qrRoot.isConnected)return;const g=globalThis.qrcode(0,'M');g.addData(joinUrl);g.make();qrRoot.innerHTML=g.createSvgTag({cellSize:4,margin:16,scalable:true});}).catch(error=>{if(!disposed&&qrRoot.isConnected)qrRoot.textContent=error.message;});
+  }
   if(!teacher){root.insertAdjacentHTML('beforeend','<button class="btn small" id="leave-playing">수업 나가기</button>');root.classList.add('student-presented');root.insertAdjacentHTML('afterbegin','<div id="student-meta"></div>');}
   const showError=error=>{if(!disposed) root.querySelector('#game-error').textContent=error.message||error;};
   root.querySelector('#game-clock').insertAdjacentHTML('afterend','<div id="qr-progress"></div>');
