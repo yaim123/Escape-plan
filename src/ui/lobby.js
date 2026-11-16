@@ -48,7 +48,7 @@ function mountLive(root, app, client, initial, { code, teacher = false, contentI
     if (busy) { queued = true; return; }
     busy = true;
     try { const next = teacher ? await client.teacher('read', state.sessionId) : await client.student(code, touch ? 'touch' : 'read'); if (!disposed) update(next); }
-    catch (err) { error = err.message; draw(); }
+    catch (err) { if(!teacher&&err.code==='42501'&&err.message.includes('참가 기록')){cleanup();client.forget(code);renderStudentEntry(root,app,code,false);return;}error = err.message; draw(); }
     finally { busy = false; if (queued && !disposed) { queued = false; schedule(); } }
   };
   const schedule = () => { if (!debounce && !disposed) debounce = setTimeout(() => { debounce = null; read(); }, 200); };
